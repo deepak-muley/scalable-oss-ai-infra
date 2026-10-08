@@ -1,0 +1,102 @@
+# Full reference: helm show values argo/argo-cd
+configs:
+  params:
+    server.insecure: true            # LAB: no TLS on the server itself
+    # Large CRDs (Prometheus, Cilium, Kueue) + many apps -> give the
+    # controller more parallelism.
+    controller.status.processors: 30
+    controller.operation.processors: 15
+
+  # OCI Helm registries. In an Application these are referenced WITHOUT the
+  # oci:// prefix, e.g. repoURL: registry.k8s.io/kueue/charts, chart: kueue.
+  # (Argo CD >= 3.1 also accepts native oci:// repoURLs.)
+  repositories:
+    oci-envoyproxy:
+      name: envoyproxy
+      type: helm
+      url: docker.io/envoyproxy
+      enableOCI: "true"
+    oci-kueue:
+      name: kueue
+      type: helm
+      url: registry.k8s.io/kueue/charts
+      enableOCI: "true"
+    oci-lws:
+      name: lws
+      type: helm
+      url: registry.k8s.io/lws/charts
+      enableOCI: "true"
+    oci-gie:
+      name: gateway-api-inference-extension
+      type: helm
+      url: registry.k8s.io/gateway-api-inference-extension/charts
+      enableOCI: "true"
+
+  cm:
+    # Kubeflow Trainer manifests are kustomize with remote bases.
+    kustomize.buildOptions: --load-restrictor LoadRestrictionsNone --enable-helm
+
+    # --- Application health: makes sync-waves between child apps work -----
+    resource.customizations.health.argoproj.io_Application: |
+      hs = {}
+      hs.status = "Progressing"
+      hs.message = ""
+      if obj.status ~= nil then
+        if obj.status.health ~= nil then
+          hs.status = obj.status.health.status
+          if obj.status.health.message ~= nil then
+            hs.message = obj.status.health.message
+          end
+        end
+      end
+      return hs
+
+    # --- Fields mutated at runtime by operators: don't call them drift -------
+    resource.customizations.ignoreDifferences.admissionregistration.k8s.io_MutatingWebhookConfiguration: |
+      jqPathExpressions:
+        - '.webhooks[]?.clientConfig.caBundle'
+    resource.customizations.ignoreDifferences.admissionregistration.k8s.io_ValidatingWebhookConfiguration: |
+      jqPathExpressions:
+        - '.webhooks[]?.clientConfig.caBundle'
+        - '.webhooks[]?.namespaceSelector'     # Kyverno rewrites these
+        - '.webhooks[]?.rules'
+    resource.customizations.ignoreDifferences.apiextensions.k8s.io_CustomResourceDefinition: |
+      jqPathExpressions:
+        - '.spec.conversion.webhook.clientConfig.caBundle'
+    resource.customizations.ignoreDifferences.apiregistration.k8s.io_APIService: |
+      jqPathExpressions:
+        - '.spec.caBundle'                     # KEDA metrics APIService
+    # NOTE: autoscaled Deployments (KEDA/HPA) change .spec.replicas at runtime.
+    # That is handled per Application (vllm-stack) with ignoreDifferences on
+    # /spec/replicas + RespectIgnoreDifferences, not globally, so that a
+    # manual replica edit elsewhere is still detected as drift.
+
+    # --- Don't track high-churn runtime objects ------------------------------
+    resource.exclusions: |
+      - apiGroups: ["cilium.io"]
+        kinds: ["CiliumIdentity", "CiliumEndpoint", "CiliumEndpointSlice"]
+        clusters: ["*"]
+      - apiGroups: ["kueue.x-k8s.io"]
+        kinds: ["Workload"]
+        clusters: ["*"]
+      - apiGroups: ["wgpolicyk8s.io", "kyverno.io", "reports.kyverno.io"]
+        kinds: ["PolicyReport", "ClusterPolicyReport", "EphemeralReport", "ClusterEphemeralReport", "AdmissionReport", "BackgroundScanReport"]
+        clusters: ["*"]
+      - apiGroups: ["aquasecurity.github.io"]
+        kinds: ["VulnerabilityReport", "ConfigAuditReport", "ExposedSecretReport", "SbomReport", "RbacAssessmentReport", "InfraAssessmentReport"]
+        clusters: ["*"]
+      - apiGroups: ["argoproj.io"]
+        kinds: ["WorkflowTaskResult"]
+        clusters: ["*"]
+
+server:
+  resources:
+    requests: {cpu: 100m, memory: 256Mi}
+repoServer:
+  resources:
+    requests: {cpu: 200m, memory: 512Mi}    # renders big charts (kube-prometheus-stack)
+controller:
+  resources:
+    requests: {cpu: 500m, memory: 1Gi}
+dex:
+  enabled: false                           # use Keycloak OIDC directly when you add SSO

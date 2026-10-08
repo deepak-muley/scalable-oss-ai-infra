@@ -35,6 +35,10 @@ a GPU lab, with the path to hyperscale documented.
 
 ## Start here
 
+> **New here? Follow the guided reading order in [docs/README.md](docs/README.md)**,
+> which takes you week by week from the big picture to running your own
+> model lifecycle. The table below is a by-topic lookup.
+
 | If you want to… | Go to |
 |---|---|
 | Understand the big picture & how a frontier lab maps to OSS | [docs/00-vision-frontier-lab-on-oss.md](docs/00-vision-frontier-lab-on-oss.md) |
@@ -52,6 +56,14 @@ a GPU lab, with the path to hyperscale documented.
 | Design decisions (Istio? KServe? Volcano? llm-d?) | [docs/11-decisions-faq.md](docs/11-decisions-faq.md) |
 | Secure it | [docs/12-security.md](docs/12-security.md) |
 | Fix it | [docs/13-troubleshooting.md](docs/13-troubleshooting.md) |
+| **Build your own model**: data → pretrain → SFT → RL (GRPO) → eval gate → serve | [docs/14-build-your-own-model.md](docs/14-build-your-own-model.md) · [`lifecycle/`](lifecycle/) |
+| Run the platform with GitOps and automate model releases | [docs/15-gitops-and-pipelines.md](docs/15-gitops-and-pipelines.md) |
+| Dashboards, SLO alerts, tracing, logs, cost per token | [docs/16-advanced-observability.md](docs/16-advanced-observability.md) |
+| Failure drills, chaos engineering, GPU health automation | [docs/17-reliability-and-chaos.md](docs/17-reliability-and-chaos.md) |
+| Capacity planning and onboarding tenants | [docs/18-capacity-planning-and-tenancy.md](docs/18-capacity-planning-and-tenancy.md) |
+| llm-d P/D disaggregation, SGLang, speculative decoding | [docs/19-advanced-serving.md](docs/19-advanced-serving.md) |
+| Build apps on it: chat UI, RAG, agents + MCP, batch API, notebooks | [docs/20-apps-and-workbench.md](docs/20-apps-and-workbench.md) |
+| Day-2: backups, upgrades, image pre-pull, multi-cluster (MultiKueue) | [docs/21-day2-ops-and-multicluster.md](docs/21-day2-ops-and-multicluster.md) |
 
 ## Repository layout
 
@@ -102,6 +114,49 @@ training/
 evaluation/
   01-load-test/               vllm bench serve jobs
   02-lm-eval/                 lm-evaluation-harness through the gateway
+  03-slo-sweep/               GuideLLM sweeps → capacity table
+inference/ (advanced)
+  07-llm-d/                   llm-d guides + prefill/decode disaggregation sketch
+  08-sglang/                  SGLang engine, A/B vs vLLM behind the gateway
+lifecycle/                    BUILD YOUR OWN MODEL
+  01-data-prep/               Ray Data: stream, dedup, filter, tokenize → S3
+  02-pretrain/                ~124M GPT with FSDP2, DCP checkpoints, MFU
+  03-sft/                     SFT with assistant-only loss masking
+  04-rl-grpo/                 veRL GRPO on GSM8K with vLLM rollouts (KubeRay)
+  05-eval-and-promote/        candidate deploy, lm-eval gate, promote/canary/rollback
+gitops/
+  01-argocd/                  Argo CD
+  02-app-of-apps/             every component as an Application (sync waves), ApplicationSet
+pipelines/
+  01-argo-workflows/          Argo Workflows + RBAC
+  02-model-release-pipeline/  data → train → register → eval → gate → promote DAG, nightly evals
+observability/
+  01-dashboards/              Grafana dashboards: serving, GPU fleet, scheduling
+  02-alerts/                  PrometheusRules incl. TTFT SLO burn-rate alerts
+  03-tracing/                 OTel Collector + Tempo, vLLM/Envoy tracing
+  04-logs/                    Loki + Alloy (prompt-safe)
+  05-cost/                    OpenCost, cost per 1M tokens
+reliability/
+  01-chaos-mesh/              Chaos Mesh
+  02-experiments/             game-day experiments (incl. kind simulator set)
+  03-gpu-health/              node-problem-detector, XID remediator, DCGM diag
+tenancy/
+  01-onboard-tenant/          namespace + quota + Kueue + netpol + RBAC + token budget
+apps/
+  01-open-webui/              chat UI for lab users
+  02-vector-db/               Qdrant
+  03-rag-app/                 FastAPI RAG over the lab docs (embed → search → rerank → chat)
+  04-agent-mcp/               tool-calling agent + MCP server (k8s, Prometheus, docs)
+  05-batch-api/               OpenAI-format batch via vllm run-batch (Kueue)
+workbench/
+  01-jupyterhub/              notebooks with GPU and Ray-client profiles
+ops/
+  01-backup-velero/           backups to MinIO, restore drill
+  02-image-prepull/           pre-pull huge images on GPU nodes
+  03-upgrades/                upgrade runbook
+multicluster/
+  01-multikueue-kind/         MultiKueue manager + worker on kind
+.github/workflows/            lint (shellcheck, yamllint, kubeconform) + kind e2e
 ```
 
 ## Quick start
@@ -119,6 +174,7 @@ kubectl -n llm-serving create secret generic hf-token --from-literal=token=hf_xx
 ./scripts/install-all.sh inference
 ./scripts/install-all.sh training
 ./scripts/verify.sh
+./scripts/lint.sh                 # shellcheck + yamllint + kubeconform (same as CI)
 ```
 
 ## A note on versions & accuracy

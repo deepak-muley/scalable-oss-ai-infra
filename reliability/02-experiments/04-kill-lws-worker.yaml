@@ -1,0 +1,17 @@
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: kill-lws-worker
+  namespace: chaos-mesh
+spec:
+  action: pod-kill
+  mode: one
+  gracePeriod: 0
+  selector:
+    namespaces: [llm-serving]
+    labelSelectors:
+      leaderworkerset.sigs.k8s.io/name: vllm-llama405b
+    expressionSelectors:
+      - key: leaderworkerset.sigs.k8s.io/worker-index
+        operator: NotIn
+        values: ["0"]              # index 0 is the leader; kill a worker

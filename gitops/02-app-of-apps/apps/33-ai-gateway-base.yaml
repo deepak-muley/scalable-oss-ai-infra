@@ -1,0 +1,31 @@
+# security-policy.yaml contains lab API keys in a Secret. For anything real,
+# delete that Secret from git and source it from OpenBao via ESO
+# (security/02-secrets-openbao-eso/external-secrets.yaml).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ai-gateway-base
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  project: ai-lab
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ai-gateway
+  sources:
+    - repoURL: https://github.com/deepak-muley/scalable-oss-ai-infra.git
+      targetRevision: main
+      path: gateway/03-ai-routes
+      directory:
+        include: '{gateway.yaml,security-policy.yaml}'
+  syncPolicy:
+    automated:
+      selfHeal: true      # revert manual drift
+      prune: false        # lab safety: deleting a file does not delete CRDs/PVCs; flip once confident
+    syncOptions:
+      - CreateNamespace=true
+      - SkipDryRunOnMissingResource=true
+    retry:
+      limit: 5
+      backoff: {duration: 10s, factor: 2, maxDuration: 5m}

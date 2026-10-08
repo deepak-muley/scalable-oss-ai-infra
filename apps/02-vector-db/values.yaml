@@ -1,0 +1,10 @@
+replicaCount: 1
+persistence:
+  size: 20Gi
+  accessModes: ["ReadWriteOnce"]
+resources:
+  requests: {cpu: 250m, memory: 1Gi}
+  limits: {memory: 4Gi}
+# config:
+#   service:
+#     api_key: "..."      # enable once apps read it from a Secret

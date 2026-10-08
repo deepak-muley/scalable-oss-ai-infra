@@ -1,0 +1,64 @@
+# Cilium is installed by hand first (pods need a CNI before Argo CD can run);
+# this Application then ADOPTS the release (same name/namespace) and owns upgrades.
+# lb-ipam.yaml: EDIT the IP range in git before syncing.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cilium
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-10"
+spec:
+  project: ai-lab
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+  sources:
+    - repoURL: https://helm.cilium.io/
+      chart: cilium
+      targetRevision: "1.18.2"
+      helm:
+        valueFiles:
+          - $values/platform/00-cilium/values.yaml
+        parameters:
+          - name: k8sServiceHost
+            value: "10.0.0.10"   # EDIT: API server IP/VIP (no kube-proxy!)
+          - name: k8sServicePort
+            value: "6443"
+    - repoURL: https://github.com/deepak-muley/scalable-oss-ai-infra.git
+      targetRevision: main
+      ref: values          # lets other sources use $values/<path>
+    - repoURL: https://github.com/deepak-muley/scalable-oss-ai-infra.git
+      targetRevision: main
+      path: platform/00-cilium
+      directory:
+        include: 'lb-ipam.yaml'
+  ignoreDifferences:
+    # Helm-generated Hubble TLS certs are regenerated on every render -> perpetual diff.
+    - group: ""
+      kind: Secret
+      name: hubble-server-certs
+      namespace: kube-system
+      jsonPointers: [/data]
+    - group: ""
+      kind: Secret
+      name: hubble-relay-client-certs
+      namespace: kube-system
+      jsonPointers: [/data]
+    - group: ""
+      kind: Secret
+      name: cilium-ca
+      namespace: kube-system
+      jsonPointers: [/data]
+  syncPolicy:
+    automated:
+      selfHeal: true      # revert manual drift
+      prune: false        # lab safety: deleting a file does not delete CRDs/PVCs; flip once confident
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+      - SkipDryRunOnMissingResource=true
+      - RespectIgnoreDifferences=true
+    retry:
+      limit: 5
+      backoff: {duration: 10s, factor: 2, maxDuration: 5m}

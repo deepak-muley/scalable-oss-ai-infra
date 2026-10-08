@@ -1,0 +1,27 @@
+# Kustomize straight from the upstream git tag (same as training/03 install.sh).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kubeflow-trainer
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  project: ai-lab
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kubeflow-system
+  sources:
+    - repoURL: https://github.com/kubeflow/trainer.git
+      targetRevision: v2.0.0
+      path: manifests/overlays/manager
+  syncPolicy:
+    automated:
+      selfHeal: true      # revert manual drift
+      prune: false        # lab safety: deleting a file does not delete CRDs/PVCs; flip once confident
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff: {duration: 10s, factor: 2, maxDuration: 5m}

@@ -1,0 +1,17 @@
+# A concrete run. Kept in examples/ (not synced by Argo CD: generateName
+# objects can't be managed declaratively — each apply would be a new run).
+#   kubectl create -f pipelines/02-model-release-pipeline/examples/run-model-release.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: model-release-
+  namespace: training
+spec:
+  workflowTemplateRef:
+    name: model-release
+  arguments:
+    parameters:
+      - {name: run-name, value: gsm8k-lora-v1}
+      - {name: base-model, value: Qwen/Qwen2.5-0.5B-Instruct}
+      - {name: max-examples, value: "2000"}
+      - {name: threshold, value: "0.25"}

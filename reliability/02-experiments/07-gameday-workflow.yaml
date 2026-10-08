@@ -1,0 +1,56 @@
+# 40-minute serial game day. Announce it, have someone on "call", keep notes.
+apiVersion: chaos-mesh.org/v1alpha1
+kind: Workflow
+metadata:
+  name: gameday-serving
+  namespace: chaos-mesh
+spec:
+  entry: entry
+  templates:
+    - name: entry
+      templateType: Serial
+      deadline: 45m
+      children: [baseline, latency, recover-1, kill-pod, recover-2, cpu-stress]
+    - name: baseline               # 5 min of steady state to compare against
+      templateType: Suspend
+      deadline: 5m
+    - name: latency
+      templateType: NetworkChaos
+      deadline: 8m
+      networkChaos:
+        action: delay
+        mode: all
+        selector:
+          namespaces: [envoy-gateway-system]
+          labelSelectors: {app.kubernetes.io/component: proxy}
+        direction: to
+        target:
+          mode: all
+          selector: {namespaces: [llm-serving]}
+        delay: {latency: 300ms, jitter: 100ms}
+    - name: recover-1
+      templateType: Suspend
+      deadline: 5m
+    - name: kill-pod
+      templateType: PodChaos
+      deadline: 2m
+      podChaos:
+        action: pod-kill
+        mode: one
+        gracePeriod: 0
+        selector:
+          namespaces: [llm-serving]
+          labelSelectors: {ai.lab/inference-engine: vllm}
+    - name: recover-2
+      templateType: Suspend
+      deadline: 10m
+    - name: cpu-stress
+      templateType: StressChaos
+      deadline: 8m
+      stressChaos:
+        mode: one
+        selector:
+          namespaces: [llm-serving]
+          labelSelectors: {ai.lab/inference-engine: vllm}
+        stressors:
+          cpu: {workers: 4, load: 90}

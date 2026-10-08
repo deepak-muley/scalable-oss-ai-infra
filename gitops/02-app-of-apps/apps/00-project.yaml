@@ -1,0 +1,18 @@
+# All lab Applications live in this project. Real setups use several projects
+# (platform / ml-teams) to restrict which repos and namespaces each may touch.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: ai-lab
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-20"
+spec:
+  description: scalable-oss-ai-infra lab platform
+  sourceRepos: ["*"]
+  destinations:
+    - server: "*"
+      namespace: "*"
+  clusterResourceWhitelist:
+    - group: "*"
+      kind: "*"

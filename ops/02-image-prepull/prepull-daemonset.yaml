@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: gpu-image-prepull
+  namespace: kube-system
+  labels: {app: gpu-image-prepull}
+spec:
+  selector:
+    matchLabels: {app: gpu-image-prepull}
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate: {maxUnavailable: 25%}   # don't hammer the registry from every node at once
+  template:
+    metadata:
+      labels: {app: gpu-image-prepull}
+    spec:
+      nodeSelector:
+        nvidia.com/gpu.present: "true"
+      tolerations:
+        - operator: Exists
+      # Each init container only exists to make the kubelet PULL its image.
+      # The command runs instantly; nothing uses the GPU.
+      initContainers:
+        - name: vllm
+          image: vllm/vllm-openai:v0.10.2
+          command: ["sh", "-c", "exit 0"]
+          resources: {requests: {cpu: 1m, memory: 8Mi}}
+        - name: lmcache
+          image: lmcache/vllm-openai:latest
+          command: ["sh", "-c", "exit 0"]
+          resources: {requests: {cpu: 1m, memory: 8Mi}}
+        - name: ray-llm
+          image: rayproject/ray-llm:2.46.0-py311-cu124
+          command: ["sh", "-c", "exit 0"]
+          resources: {requests: {cpu: 1m, memory: 8Mi}}
+        - name: pytorch
+          image: pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime
+          command: ["sh", "-c", "exit 0"]
+          resources: {requests: {cpu: 1m, memory: 8Mi}}
+      containers:
+        - name: pause
+          image: registry.k8s.io/pause:3.10
+          resources:
+            requests: {cpu: 1m, memory: 8Mi}
+            limits: {memory: 16Mi}

@@ -1,0 +1,121 @@
+# The identity the model-release pipeline runs as. Every permission below is
+# something a step actually does — nothing cluster-wide.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: model-release
+  namespace: training
+---
+# --- training: run data-prep RayJobs and TrainJobs; executor bookkeeping ----
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: model-release
+  namespace: training
+rules:
+  - apiGroups: [ray.io]
+    resources: [rayjobs]
+    verbs: [create, get, list, watch, patch, delete]
+  - apiGroups: [trainer.kubeflow.org]
+    resources: [trainjobs]
+    verbs: [create, get, list, watch, patch, delete]
+  - apiGroups: [batch]
+    resources: [jobs]
+    verbs: [create, get, list, watch, delete]
+  - apiGroups: [""]
+    resources: [configmaps]
+    verbs: [get, list]
+  # Argo executor (emissary) reports step outputs through these:
+  - apiGroups: [argoproj.io]
+    resources: [workflowtaskresults]
+    verbs: [create, patch]
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, watch, patch]
+  - apiGroups: [""]
+    resources: [pods/log]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: model-release
+  namespace: training
+subjects:
+  - {kind: ServiceAccount, name: model-release, namespace: training}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: model-release}
+---
+# --- llm-serving: deploy / delete candidate vLLM servers ---------------------
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: model-release
+  namespace: llm-serving
+rules:
+  - apiGroups: [apps]
+    resources: [deployments]
+    verbs: [create, get, list, watch, update, patch, delete]
+  - apiGroups: [apps]
+    resources: [replicasets]          # kubectl rollout status
+    verbs: [get, list, watch]
+  - apiGroups: [""]
+    resources: [services]
+    verbs: [create, get, list, watch, update, patch, delete]
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: model-release
+  namespace: llm-serving
+subjects:
+  - {kind: ServiceAccount, name: model-release, namespace: training}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: model-release}
+---
+# --- ai-gateway: register the candidate backend, flip the alias --------------
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: model-release
+  namespace: ai-gateway
+rules:
+  - apiGroups: [aigateway.envoyproxy.io]
+    resources: [aigatewayroutes]
+    verbs: [get, list, update, patch]
+  - apiGroups: [aigateway.envoyproxy.io]
+    resources: [aiservicebackends]
+    verbs: [create, get, list, update, patch]
+  - apiGroups: [gateway.envoyproxy.io]
+    resources: [backends]
+    verbs: [create, get, list, update, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: model-release
+  namespace: ai-gateway
+subjects:
+  - {kind: ServiceAccount, name: model-release, namespace: training}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: model-release}
+---
+# --- evaluation: optional, for running eval as Kueue-queued Jobs -------------
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: model-release
+  namespace: evaluation
+rules:
+  - apiGroups: [batch]
+    resources: [jobs]
+    verbs: [create, get, list, watch, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: model-release
+  namespace: evaluation
+subjects:
+  - {kind: ServiceAccount, name: model-release, namespace: training}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: model-release}

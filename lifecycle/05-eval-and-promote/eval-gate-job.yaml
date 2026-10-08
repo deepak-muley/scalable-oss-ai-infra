@@ -1,0 +1,61 @@
+# Same task, same limit, same few-shot settings for candidate and baseline,
+# otherwise the comparison is meaningless.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: eval-gate
+  namespace: evaluation
+  labels:
+    kueue.x-k8s.io/queue-name: batch      # evals are batch work; they queue for quota
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: lm-eval
+          image: python:3.12-slim
+          env:
+            - {name: TASK, value: "TASK_VALUE"}
+            - {name: LIMIT, value: "LIMIT_VALUE"}
+            - {name: CANDIDATE_URL, value: "http://vllm-candidate.llm-serving.svc.cluster.local:8000/v1/chat/completions"}
+            - {name: BASELINE_URL, value: "BASELINE_URL_VALUE"}
+            - {name: BASELINE_MODEL, value: "BASELINE_MODEL_VALUE"}
+            - {name: CANDIDATE_TAG, value: "MODEL_NAME_VALUE/MODEL_VERSION_VALUE"}
+            - {name: MLFLOW_TRACKING_URI, value: http://mlflow.mlops.svc.cluster.local}
+          command: ["bash", "-c"]
+          args:
+            - |
+              set -e
+              pip install -q "lm-eval[api]" mlflow
+              run() {  # run <name> <model> <url>
+                lm_eval --model local-chat-completions \
+                  --model_args "model=$2,base_url=$3,num_concurrent=8,max_retries=3,tokenized_requests=False" \
+                  --tasks "$TASK" --apply_chat_template --fewshot_as_multiturn \
+                  --limit "$LIMIT" --output_path "/tmp/$1"
+              }
+              run candidate candidate "$CANDIDATE_URL"
+              run baseline "$BASELINE_MODEL" "$BASELINE_URL"
+              python - <<'PY'
+              import glob, json, os, mlflow
+              def score(name):
+                  f = sorted(glob.glob(f"/tmp/{name}/**/*.json", recursive=True))[-1]
+                  res = json.load(open(f))["results"][os.environ["TASK"]]
+                  # first headline metric (exact_match / acc), skipping stderr entries
+                  key = next(k for k in res if not k.endswith("_stderr") and "stderr" not in k
+                             and any(m in k for m in ("exact_match", "acc")))
+                  return key, float(res[key])
+              k, c = score("candidate"); _, b = score("baseline")
+              out = {"task": os.environ["TASK"], "metric": k, "candidate": c, "baseline": b,
+                     "model": os.environ["CANDIDATE_TAG"], "limit": int(os.environ["LIMIT"])}
+              try:
+                  mlflow.set_experiment("eval-gate")
+                  with mlflow.start_run(run_name=os.environ["CANDIDATE_TAG"]):
+                      mlflow.log_params({"task": out["task"], "metric": k, "limit": out["limit"]})
+                      mlflow.log_metrics({"candidate": c, "baseline": b, "delta": c - b})
+              except Exception as e:
+                  print("mlflow logging skipped:", e)
+              print("GATE_RESULT " + json.dumps(out), flush=True)
+              PY
+          resources:
+            requests: {cpu: "1", memory: 2Gi}

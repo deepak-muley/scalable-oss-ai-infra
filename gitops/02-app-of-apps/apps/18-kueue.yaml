@@ -1,0 +1,33 @@
+# OCI chart: repo registered with enableOCI in 01-argocd/values.yaml.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kueue
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"
+spec:
+  project: ai-lab
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kueue-system
+  sources:
+    - repoURL: registry.k8s.io/kueue/charts
+      chart: kueue
+      targetRevision: "0.13.4"
+      helm:
+        valueFiles:
+          - $values/platform/09-kueue/values.yaml
+    - repoURL: https://github.com/deepak-muley/scalable-oss-ai-infra.git
+      targetRevision: main
+      ref: values          # lets other sources use $values/<path>
+  syncPolicy:
+    automated:
+      selfHeal: true      # revert manual drift
+      prune: false        # lab safety: deleting a file does not delete CRDs/PVCs; flip once confident
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff: {duration: 10s, factor: 2, maxDuration: 5m}

@@ -1,0 +1,13 @@
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: kill-one-vllm
+  namespace: chaos-mesh
+spec:
+  action: pod-kill
+  mode: one                      # one random matching pod
+  gracePeriod: 0                 # no graceful shutdown: in-flight streams break
+  selector:
+    namespaces: [llm-serving]
+    labelSelectors:
+      ai.lab/inference-engine: vllm

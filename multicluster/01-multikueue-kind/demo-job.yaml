@@ -1,0 +1,21 @@
+# Submit to the MANAGER; it runs on whichever worker admits it.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  generateName: fleet-demo-
+  namespace: training
+  labels:
+    kueue.x-k8s.io/queue-name: research
+spec:
+  parallelism: 2
+  completions: 2
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: work
+          image: busybox:1.36
+          command: ["sh", "-c", "echo running on $(hostname) in the worker cluster; sleep 60"]
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {nvidia.com/gpu: 2}

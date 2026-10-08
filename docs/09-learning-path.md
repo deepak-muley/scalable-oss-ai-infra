@@ -78,8 +78,49 @@ or a TRL/accelerate recipe) across nodes. Measure MFU.
 DeepSeek with EP). Kill the worker pod. *Q: what does LWS do, and how long
 is the outage?*
 
-**Lab 3.4 — Disaggregation.** Follow an llm-d P/D guide on your hardware.
-*Q: at what load does P/D beat aggregated serving on TPOT p99?*
+**Lab 3.4 — Disaggregation.** Follow an llm-d P/D guide on your hardware
+(`inference/07-llm-d`, [docs/19](19-advanced-serving.md)). *Q: at what load
+does P/D beat aggregated serving on TPOT p99?*
+
+**Lab 3.5 — Engine bake-off.** Deploy `inference/08-sglang` next to vLLM and
+A/B them behind the `lab-chat-ab` route. *Q: which engine wins on your
+workload, and why?*
+
+## Track A — build your own model (stages 1–3 hardware)
+
+Follow [docs/14](14-build-your-own-model.md) and `lifecycle/` in order.
+
+1. **Data** (`01-data-prep`). Tokenize a fineweb-edu sample. *Q: how many
+   tokens per GB of text, and how much did dedup remove?*
+2. **Pretrain** (`02-pretrain`). Train the ~124M GPT. Kill a pod mid-run
+   and confirm it resumes from the DCP checkpoint. *Q: what MFU do you get,
+   and what limits it?*
+3. **SFT** (`03-sft`). *Q: compare loss with and without assistant-only
+   masking.*
+4. **RL** (`04-rl-grpo`). Run GRPO on GSM8K. *Q: plot reward and response
+   length over steps. Where is the time spent, rollout or training?*
+5. **Ship** (`05-eval-and-promote`). Gate, canary, promote, roll back.
+
+## Track B — operate it like a lab
+
+* **GitOps** ([docs/15](15-gitops-and-pipelines.md)). Bootstrap Argo CD,
+  change a value in git and watch it sync; break something by hand and
+  watch self-heal. Run the `model-release` pipeline end to end.
+* **Observe** ([docs/16](16-advanced-observability.md)). Load the
+  dashboards, trace one slow request from gateway to engine, and compute
+  cost per 1M tokens per model.
+* **Break it** ([docs/17](17-reliability-and-chaos.md)). Run a game day
+  with `reliability/02-experiments` (on kind first, using the simulator
+  set). Write a postmortem for each surprise.
+* **Plan capacity and onboard tenants** ([docs/18](18-capacity-planning-and-tenancy.md)).
+  Run a GuideLLM sweep, size replicas for a target peak, then onboard two
+  tenants with different GPU quotas and token budgets and verify isolation.
+* **Use it** ([docs/20](20-apps-and-workbench.md)). Chat with the lab docs
+  through the RAG app, let the MCP agent answer "why is my pod pending?",
+  run a batch job, and work from JupyterHub against the dev Ray cluster.
+* **Day 2** ([docs/21](21-day2-ops-and-multicluster.md)). Back up and
+  restore a namespace, do a version bump with the upgrade runbook, and
+  dispatch a job across clusters with MultiKueue on kind.
 
 ## Stage 4 — think at hyperscale
 

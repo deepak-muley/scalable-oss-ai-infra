@@ -1,0 +1,40 @@
+# Brings up the whole lab on kind (Cilium + fake GPUs + vLLM simulator) and
+# runs kind/test.sh. Slow (~15 min) — runs on demand and on PRs that touch
+# the stack.
+name: kind-e2e
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "platform/**"
+      - "gateway/**"
+      - "kind/**"
+      - "training/04-kuberay/**"
+      - "versions.env"
+      - "scripts/lib.sh"
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - uses: helm/kind-action@v1
+        with:
+          install_only: true
+      - name: Free disk space (images are big)
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc || true
+      - name: Bring up lab
+        env:
+          WITH_MONITORING: "false"     # GitHub runners: 4 CPU / 16 GB
+        run: ./kind/up.sh
+      - name: Test
+        run: ./kind/test.sh
+      - name: Diagnostics
+        if: failure()
+        run: |
+          kubectl get pods -A -o wide
+          kubectl get events -A --sort-by=.lastTimestamp | tail -100
+          kubectl get gateway,aigatewayroute -A -o yaml | head -300
+          kubectl -n envoy-gateway-system logs deploy/envoy-gateway --tail=200 || true
+          kubectl -n envoy-ai-gateway-system logs deploy/ai-gateway-controller --tail=200 || true

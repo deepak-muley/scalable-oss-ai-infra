@@ -1,0 +1,63 @@
+# Zero to JupyterHub (z2jh). helm show values jupyterhub/jupyterhub for your version.
+hub:
+  config:
+    JupyterHub:
+      authenticator_class: dummy        # LAB ONLY
+    DummyAuthenticator:
+      password: change-me-lab-password
+    # --- Keycloak SSO instead (pip package oauthenticator is in the hub image) ---
+    # JupyterHub:
+    #   authenticator_class: generic-oauth
+    # GenericOAuthenticator:
+    #   client_id: jupyterhub
+    #   client_secret: from-keycloak
+    #   oauth_callback_url: http://hub.ai.lab/hub/oauth_callback
+    #   authorize_url: http://keycloak.ai.lab/realms/ai-lab/protocol/openid-connect/auth
+    #   token_url: http://keycloak-keycloakx-http.security.svc.cluster.local/realms/ai-lab/protocol/openid-connect/token
+    #   userdata_url: http://keycloak-keycloakx-http.security.svc.cluster.local/realms/ai-lab/protocol/openid-connect/userinfo
+    #   username_claim: preferred_username
+    #   scope: [openid, profile, email]
+    #   allow_all: true
+
+proxy:
+  service:
+    type: ClusterIP                   # expose via the lab Gateway/port-forward, not a new LB IP
+
+cull:
+  enabled: true
+  timeout: 3600                       # stop servers idle for 1h (frees GPUs)
+  every: 300
+
+singleuser:
+  image:
+    name: quay.io/jupyter/minimal-notebook
+    tag: python-3.11                  # pin a dated tag for reproducibility
+  storage:
+    type: dynamic
+    capacity: 10Gi
+  cpu: {limit: 2, guarantee: 0.5}
+  memory: {limit: 4G, guarantee: 1G}
+  extraEnv:
+    MLFLOW_TRACKING_URI: http://mlflow.mlops.svc.cluster.local
+    RAY_ADDRESS: ray://ray-dev-head-svc.training.svc.cluster.local:10001
+    # call models like any client: OpenAI(base_url=$OPENAI_BASE_URL, default_headers={"x-api-key": ...})
+    OPENAI_BASE_URL: http://REPLACE-envoy-ai-gateway-svc.envoy-gateway-system.svc.cluster.local/v1
+  profileList:
+    - display_name: "CPU small"
+      description: "2 CPU / 4 GB: data work, gateway calls, MLflow"
+      default: true
+    - display_name: "1 GPU, PyTorch"
+      description: "debug training code on a real GPU (culled after 1h idle)"
+      kubespawner_override:
+        image: quay.io/jupyter/pytorch-notebook:cuda12-python-3.11   # verify tag exists
+        cpu_limit: 8
+        mem_limit: 48G
+        extra_resource_limits:
+          nvidia.com/gpu: "1"
+        extra_pod_config:
+          runtimeClassName: nvidia
+    - display_name: "Ray client (dev RayCluster)"
+      description: "pip install 'ray[client]==2.46.0' then ray.init() uses RAY_ADDRESS"
+      kubespawner_override:
+        cpu_limit: 4
+        mem_limit: 8G

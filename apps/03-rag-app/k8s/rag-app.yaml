@@ -1,0 +1,63 @@
+# Build & load the image first (see README). GATEWAY_URL must be the Envoy
+# proxy Service FQDN: kubectl get svc -n envoy-gateway-system
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rag-app
+  namespace: apps
+data:
+  GATEWAY_URL: "http://REPLACE-envoy-ai-gateway-svc.envoy-gateway-system.svc.cluster.local"
+  QDRANT_URL: "http://qdrant.apps.svc.cluster.local:6333"
+  COLLECTION: "lab-docs"
+  EMBED_MODEL: "BAAI/bge-m3"
+  CHAT_MODEL: "lab-chat"
+  # in-cluster reranker (inference/05-model-catalog/embedding-and-reranker.yaml); "" disables reranking
+  RERANK_URL: "http://vllm-reranker.llm-serving.svc.cluster.local:8000"
+  RERANK_MODEL: "BAAI/bge-reranker-v2-m3"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: rag-app-gateway-key
+  namespace: apps
+type: Opaque
+stringData:
+  GATEWAY_API_KEY: sk-lab-alice-change-me   # or sync from OpenBao via ESO
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rag-app
+  namespace: apps
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: rag-app}}
+  template:
+    metadata:
+      labels: {app: rag-app}
+    spec:
+      securityContext: {runAsNonRoot: true, runAsUser: 10001}
+      containers:
+        - name: app
+          image: rag-app:0.1          # e.g. ghcr.io/YOUR_ORG/rag-app:0.1 ; kind: kind load docker-image
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef: {name: rag-app}
+            - secretRef: {name: rag-app-gateway-key}
+          ports: [{name: http, containerPort: 8080}]
+          readinessProbe: {httpGet: {path: /healthz, port: 8080}, periodSeconds: 5}
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {memory: 512Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rag-app
+  namespace: apps
+spec:
+  selector: {app: rag-app}
+  ports: [{name: http, port: 80, targetPort: 8080}]

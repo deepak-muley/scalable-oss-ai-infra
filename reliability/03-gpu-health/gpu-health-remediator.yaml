@@ -1,0 +1,124 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gpu-health
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: gpu-health-remediator
+  namespace: gpu-health
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: gpu-health-remediator
+rules:
+  - apiGroups: [""]
+    resources: [nodes]
+    verbs: [get, list, patch, update]
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list]
+  - apiGroups: [""]
+    resources: [pods/eviction]          # only used when DRAIN=true
+    verbs: [create]
+  - apiGroups: [apps]
+    resources: [daemonsets]             # kubectl drain checks DaemonSet ownership
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: gpu-health-remediator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: gpu-health-remediator
+subjects:
+  - kind: ServiceAccount
+    name: gpu-health-remediator
+    namespace: gpu-health
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gpu-health-remediator
+  namespace: gpu-health
+data:
+  remediate.sh: |
+    #!/usr/bin/env bash
+    # Toy auto-remediation:
+    #   1. nodes whose DCGM last-XID is a FATAL code      (Prometheus)
+    #   2. nodes with condition GPUHardwareProblem=True   (node-problem-detector)
+    # -> cordon + label ai.lab/gpu-health=bad (+ optional drain)
+    set -euo pipefail
+    PROM="${PROM:-http://kps-prometheus.monitoring.svc:9090}"
+    FATAL_XIDS="${FATAL_XIDS:-48 63 64 74 79 92 94 95}"
+    DRY_RUN="${DRY_RUN:-true}"
+    DRAIN="${DRAIN:-false}"
+
+    act() { if [[ "$DRY_RUN" == "true" ]]; then echo "[dry-run] $*"; else echo "+ $*"; "$@"; fi; }
+
+    quarantine() {   # quarantine <node> <reason>
+      local node="$1" reason="$2"
+      if [[ "$(kubectl get node "$node" -o jsonpath='{.metadata.labels.ai\.lab/gpu-health}' 2>/dev/null)" == "bad" ]]; then
+        echo "$node already quarantined"; return
+      fi
+      echo "QUARANTINE $node ($reason)"
+      act kubectl cordon "$node"
+      act kubectl label node "$node" ai.lab/gpu-health=bad "ai.lab/gpu-health-reason=${reason}" --overwrite
+      act kubectl annotate node "$node" "ai.lab/gpu-health-since=$(date -u +%FT%TZ)" --overwrite
+      if [[ "$DRAIN" == "true" ]]; then
+        act kubectl drain "$node" --ignore-daemonsets --delete-emptydir-data --timeout=10m
+      fi
+    }
+
+    echo "== DCGM fatal XIDs"
+    curl -fsS --get "$PROM/api/v1/query" --data-urlencode 'query=max by (Hostname) (DCGM_FI_DEV_XID_ERRORS) > 0' \
+      | jq -r '.data.result[] | "\(.metric.Hostname) \(.value[1])"' \
+      | while read -r node xid; do
+          xid="${xid%%.*}"
+          if [[ " $FATAL_XIDS " == *" $xid "* ]]; then quarantine "$node" "xid-$xid"
+          else echo "$node: non-fatal XID $xid (application-level?) - not quarantining"; fi
+        done
+
+    echo "== node-problem-detector conditions"
+    kubectl get nodes -o json \
+      | jq -r '.items[] | select(any(.status.conditions[]?; .type=="GPUHardwareProblem" and .status=="True")) | .metadata.name' \
+      | while read -r node; do quarantine "$node" "npd-fatal-xid"; done
+
+    echo "== quarantined nodes"
+    kubectl get nodes -l ai.lab/gpu-health=bad -L ai.lab/gpu-health-reason || true
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: gpu-health-remediator
+  namespace: gpu-health
+spec:
+  schedule: "*/5 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      template:
+        spec:
+          serviceAccountName: gpu-health-remediator
+          restartPolicy: Never
+          containers:
+            - name: remediate
+              image: alpine/k8s:1.31.4        # kubectl + curl + jq + bash; pin to your k8s minor
+              command: ["bash", "/scripts/remediate.sh"]
+              env:
+                - {name: DRY_RUN, value: "true"}   # flip to "false" when you trust it
+                - {name: DRAIN, value: "false"}
+              resources:
+                requests: {cpu: 10m, memory: 32Mi}
+                limits: {memory: 128Mi}
+              volumeMounts: [{name: scripts, mountPath: /scripts}]
+          volumes:
+            - name: scripts
+              configMap: {name: gpu-health-remediator}

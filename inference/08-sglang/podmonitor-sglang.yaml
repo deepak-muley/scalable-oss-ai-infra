@@ -1,0 +1,15 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: sglang-engines
+  namespace: monitoring
+spec:
+  namespaceSelector:
+    matchNames: [llm-serving]
+  selector:
+    matchLabels:
+      ai.lab/inference-engine: sglang
+  podMetricsEndpoints:
+    - targetPort: 8000
+      path: /metrics
+      interval: 10s

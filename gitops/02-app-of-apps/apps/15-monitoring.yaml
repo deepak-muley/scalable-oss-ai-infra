@@ -1,0 +1,42 @@
+# ServerSideApply is required: the Prometheus Operator CRDs exceed the 256KiB
+# last-applied-configuration annotation limit of client-side apply.
+# releaseName kps matches the manual install (service kps-prometheus).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kube-prometheus-stack
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-6"
+spec:
+  project: ai-lab
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  sources:
+    - repoURL: https://prometheus-community.github.io/helm-charts
+      chart: kube-prometheus-stack
+      targetRevision: "*"
+      helm:
+        releaseName: kps
+        valueFiles:
+          - $values/platform/06-monitoring/values.yaml
+    - repoURL: https://github.com/deepak-muley/scalable-oss-ai-infra.git
+      targetRevision: main
+      ref: values          # lets other sources use $values/<path>
+    - repoURL: https://github.com/deepak-muley/scalable-oss-ai-infra.git
+      targetRevision: main
+      path: platform/06-monitoring
+      directory:
+        include: 'podmonitor-*.yaml'
+  syncPolicy:
+    automated:
+      selfHeal: true      # revert manual drift
+      prune: false        # lab safety: deleting a file does not delete CRDs/PVCs; flip once confident
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+      - SkipDryRunOnMissingResource=true
+    retry:
+      limit: 5
+      backoff: {duration: 10s, factor: 2, maxDuration: 5m}

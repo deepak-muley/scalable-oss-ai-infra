@@ -1,0 +1,34 @@
+# The AI Gateway's Envoy Gateway values (extension manager hooks) are pulled
+# straight from the upstream tag — Argo CD accepts http(s) URLs in valueFiles.
+# Keep the tag in lockstep with the ai-gateway apps below (compat matrix!).
+# For InferencePool / rate-limit add-ons, append their values URLs here.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: envoy-gateway
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-3"
+spec:
+  project: ai-lab
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: envoy-gateway-system
+  sources:
+    - repoURL: docker.io/envoyproxy
+      chart: gateway-helm
+      targetRevision: "v1.5.0"
+      helm:
+        releaseName: eg
+        valueFiles:
+          - https://raw.githubusercontent.com/envoyproxy/ai-gateway/v0.3.0/manifests/envoy-gateway-values.yaml
+  syncPolicy:
+    automated:
+      selfHeal: true      # revert manual drift
+      prune: false        # lab safety: deleting a file does not delete CRDs/PVCs; flip once confident
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff: {duration: 10s, factor: 2, maxDuration: 5m}

@@ -1,0 +1,30 @@
+# The manual install restarts envoy-gateway after this comes up. Under GitOps,
+# if AI routes aren't programmed on first bootstrap, restart once:
+#   kubectl rollout restart -n envoy-gateway-system deploy/envoy-gateway
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ai-gateway
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+spec:
+  project: ai-lab
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: envoy-ai-gateway-system
+  sources:
+    - repoURL: docker.io/envoyproxy
+      chart: ai-gateway-helm
+      targetRevision: "v0.3.0"
+      helm:
+        releaseName: aieg
+  syncPolicy:
+    automated:
+      selfHeal: true      # revert manual drift
+      prune: false        # lab safety: deleting a file does not delete CRDs/PVCs; flip once confident
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff: {duration: 10s, factor: 2, maxDuration: 5m}

@@ -1,0 +1,63 @@
+# MANAGER cluster: knows about workers, dispatches workloads, runs nothing itself.
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: MultiKueueCluster
+metadata:
+  name: worker1
+spec:
+  kubeConfig:
+    locationType: Secret
+    location: worker1-secret          # in kueue-system, key "kubeconfig"
+---
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: MultiKueueConfig
+metadata:
+  name: lab-fleet
+spec:
+  clusters: [worker1]                 # add worker2, worker3... here
+---
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: AdmissionCheck
+metadata:
+  name: multikueue
+spec:
+  controllerName: kueue.x-k8s.io/multikueue
+  parameters:
+    apiGroup: kueue.x-k8s.io
+    kind: MultiKueueConfig
+    name: lab-fleet
+---
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: ResourceFlavor
+metadata:
+  name: default-flavor
+---
+# Quota here is the fleet-level budget; real placement is decided by workers.
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: ClusterQueue
+metadata:
+  name: fleet-cq
+spec:
+  namespaceSelector: {}
+  resourceGroups:
+    - coveredResources: ["cpu", "memory", "nvidia.com/gpu"]
+      flavors:
+        - name: default-flavor
+          resources:
+            - {name: cpu, nominalQuota: 100}
+            - {name: memory, nominalQuota: 400Gi}
+            - {name: nvidia.com/gpu, nominalQuota: 16}
+  admissionChecks:
+    - multikueue
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: training
+---
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: LocalQueue
+metadata:
+  name: research
+  namespace: training
+spec:
+  clusterQueue: fleet-cq

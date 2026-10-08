@@ -1,0 +1,37 @@
+# helm show values open-webui/open-webui  — keys move between chart versions.
+ollama:
+  enabled: false             # we serve models with vLLM, not Ollama
+pipelines:
+  enabled: false             # optional Python middleware; enable to experiment
+websocket:
+  enabled: false
+replicaCount: 1
+persistence:
+  enabled: true
+  size: 5Gi                  # chat history, users (SQLite)
+service:
+  type: ClusterIP
+  port: 80
+# openaiBaseApiUrl is set by install.sh; the key comes from Secret open-webui-openai
+extraEnvVars:
+  - name: OPENAI_API_KEY
+    valueFrom:
+      secretKeyRef: {name: open-webui-openai, key: api-key}
+  - name: ENABLE_OLLAMA_API
+    value: "False"
+  - name: ENABLE_FORWARD_USER_INFO_HEADERS   # X-OpenWebUI-User-* -> gateway logs/limits
+    value: "True"
+  # --- Optional: SSO with Keycloak (security/01-identity-keycloak) ---
+  # - name: ENABLE_OAUTH_SIGNUP
+  #   value: "True"
+  # - name: OAUTH_PROVIDER_NAME
+  #   value: "Keycloak"
+  # - name: OPENID_PROVIDER_URL
+  #   value: "http://keycloak-keycloakx-http.security.svc.cluster.local/realms/ai-lab/.well-known/openid-configuration"
+  # - name: OAUTH_CLIENT_ID
+  #   value: "open-webui"
+  # - name: OAUTH_CLIENT_SECRET
+  #   value: "from-keycloak"
+resources:
+  requests: {cpu: 250m, memory: 512Mi}
+  limits: {memory: 2Gi}

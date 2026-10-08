@@ -1,0 +1,69 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sglang-qwen-7b
+  namespace: llm-serving
+  labels: {app: sglang-qwen-7b}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app: sglang-qwen-7b}
+  template:
+    metadata:
+      labels:
+        app: sglang-qwen-7b
+        ai.lab/inference-engine: sglang     # scraped by podmonitor-sglang.yaml
+    spec:
+      runtimeClassName: nvidia
+      containers:
+        - name: sglang
+          image: lmsysorg/sglang:v0.5.2-cu126   # VERIFY tag exists + CUDA matches driver
+          command: ["python3", "-m", "sglang.launch_server"]
+          args:
+            - --model-path=Qwen/Qwen2.5-7B-Instruct
+            - --host=0.0.0.0
+            - --port=8000
+            - --mem-fraction-static=0.85      # fraction of GPU mem for weights + KV pool
+            - --context-length=32768
+            - --enable-metrics                # Prometheus /metrics (sglang:* names)
+            # - --tp=2                        # tensor parallel
+            # - --enable-dp-attention         # DeepSeek-style DP attention for MoE
+          env:
+            - {name: HF_HOME, value: /models/hf}
+            - name: HF_TOKEN
+              valueFrom: {secretKeyRef: {name: hf-token, key: token, optional: true}}
+          ports:
+            - {name: http, containerPort: 8000}
+          startupProbe:
+            httpGet: {path: /health, port: 8000}
+            periodSeconds: 10
+            failureThreshold: 90
+          readinessProbe:
+            httpGet: {path: /health, port: 8000}
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: {path: /health, port: 8000}
+            periodSeconds: 15
+            failureThreshold: 4
+          resources:
+            requests: {cpu: "4", memory: 32Gi}
+            limits: {nvidia.com/gpu: 1, memory: 48Gi}
+          volumeMounts:
+            - {name: models, mountPath: /models}
+            - {name: shm, mountPath: /dev/shm}
+      volumes:
+        - name: models
+          persistentVolumeClaim: {claimName: model-cache}
+        - name: shm
+          emptyDir: {medium: Memory, sizeLimit: 16Gi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sglang-qwen-7b
+  namespace: llm-serving
+spec:
+  selector: {app: sglang-qwen-7b}
+  ports:
+    - {name: http, port: 8000, targetPort: 8000}

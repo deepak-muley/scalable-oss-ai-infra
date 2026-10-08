@@ -1,0 +1,18 @@
+# Lets the AI gateway send (a share of) lab-chat traffic to the candidate.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: Backend
+metadata:
+  name: vllm-candidate
+  namespace: ai-gateway
+spec:
+  endpoints:
+    - fqdn: {hostname: vllm-candidate.llm-serving.svc.cluster.local, port: 8000}
+---
+apiVersion: aigateway.envoyproxy.io/v1alpha1
+kind: AIServiceBackend
+metadata:
+  name: vllm-candidate
+  namespace: ai-gateway
+spec:
+  schema: {name: OpenAI}
+  backendRef: {name: vllm-candidate, kind: Backend, group: gateway.envoyproxy.io}

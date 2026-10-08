@@ -1,0 +1,5 @@
+[
+  {"op": "add", "path": "/spec/template/spec/containers/0/args/-", "value": "--otlp-traces-endpoint=grpc://otel-collector.observability.svc.cluster.local:4317"},
+  {"op": "add", "path": "/spec/template/spec/containers/0/env/-", "value": {"name": "OTEL_SERVICE_NAME", "value": "vllm-qwen-7b"}},
+  {"op": "add", "path": "/spec/template/spec/containers/0/env/-", "value": {"name": "OTEL_EXPORTER_OTLP_TRACES_INSECURE", "value": "true"}}
+]

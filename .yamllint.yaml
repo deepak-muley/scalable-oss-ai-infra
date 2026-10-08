@@ -1,0 +1,15 @@
+extends: relaxed
+ignore: |
+  .git/
+  gateway/01-envoy-gateway/envoy-gateway-values.yaml
+  gateway/01-envoy-gateway/values-addon-*.yaml
+rules:
+  line-length: disable
+  indentation: disable
+  trailing-spaces: enable
+  document-start: disable
+  truthy: disable
+  braces: disable
+  brackets: disable
+  commas: disable
+  colons: disable

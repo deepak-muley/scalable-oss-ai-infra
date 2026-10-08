@@ -1,0 +1,29 @@
+# Nightly: platform config + small stateful services. Excludes the big,
+# re-downloadable model cache.
+apiVersion: velero.io/v1
+kind: Schedule
+metadata:
+  name: nightly-lab-config
+  namespace: velero
+spec:
+  schedule: "0 2 * * *"
+  template:
+    includedNamespaces: [ai-gateway, mlops, security, training, apps, workbench]
+    excludedResources: [events, events.events.k8s.io]
+    defaultVolumesToFsBackup: true      # back up PVC contents in these namespaces
+    ttl: 168h0m0s                       # keep 7 days
+---
+# Weekly: llm-serving OBJECTS only (Deployments, ConfigMaps, ScaledObjects…),
+# no volume data. The model-cache PVC is never backed up.
+apiVersion: velero.io/v1
+kind: Schedule
+metadata:
+  name: weekly-llm-serving-objects
+  namespace: velero
+spec:
+  schedule: "0 3 * * 0"
+  template:
+    includedNamespaces: [llm-serving]
+    defaultVolumesToFsBackup: false
+    snapshotVolumes: false
+    ttl: 720h0m0s

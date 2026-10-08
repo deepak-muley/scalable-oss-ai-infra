@@ -1,0 +1,56 @@
+# Laptop versions aimed at the llm-d-inference-sim pods from kind/.
+# Run kind/test.sh (or a curl loop) in parallel to see the effect.
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: kind-kill-sim-llama
+  namespace: chaos-mesh
+spec:
+  action: pod-kill
+  mode: one
+  gracePeriod: 0
+  selector:
+    namespaces: [llm-serving]
+    labelSelectors: {app: sim-llama8b}
+---
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: kind-latency-to-sims
+  namespace: chaos-mesh
+spec:
+  action: delay
+  mode: all
+  selector:
+    namespaces: [envoy-gateway-system]
+    labelSelectors: {app.kubernetes.io/component: proxy}
+  direction: to
+  target:
+    mode: all
+    selector:
+      namespaces: [llm-serving]
+      expressionSelectors:
+        - {key: app, operator: In, values: [sim-qwen-small, sim-llama8b]}
+  delay: {latency: 500ms, jitter: 100ms}
+  duration: 3m
+---
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: kind-partition-qwen
+  namespace: chaos-mesh
+spec:
+  action: partition            # gateway can't reach sim-qwen-small at all
+  mode: all
+  selector:
+    namespaces: [envoy-gateway-system]
+    labelSelectors: {app.kubernetes.io/component: proxy}
+  direction: to
+  target:
+    mode: all
+    selector:
+      namespaces: [llm-serving]
+      labelSelectors: {app: sim-qwen-small}
+  duration: 2m
+# Expect: requests for Qwen/lab-chat fail/timeout; Llama keeps working.
+# Then add a fallback backend with priority in the AIGatewayRoute and re-run.

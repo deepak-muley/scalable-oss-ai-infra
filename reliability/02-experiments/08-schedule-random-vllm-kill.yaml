@@ -1,0 +1,20 @@
+# Continuous chaos: one random vLLM pod killed every 30 minutes during lab
+# hours. Only enable once experiment 1 is boring (fixes in place).
+apiVersion: chaos-mesh.org/v1alpha1
+kind: Schedule
+metadata:
+  name: random-vllm-kill
+  namespace: chaos-mesh
+spec:
+  schedule: "*/30 9-18 * * 1-5"
+  historyLimit: 5
+  concurrencyPolicy: Forbid
+  type: PodChaos
+  podChaos:
+    action: pod-kill
+    mode: one
+    gracePeriod: 0
+    selector:
+      namespaces: [llm-serving]
+      labelSelectors:
+        ai.lab/inference-engine: vllm

@@ -1,0 +1,30 @@
+# Members of OIDC group tenant-${TENANT} (Keycloak group -> "groups" claim)
+# can manage workloads in their namespace only.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: tenant-${TENANT}-edit
+  namespace: tenant-${TENANT}
+subjects:
+  - kind: Group
+    apiGroup: rbac.authorization.k8s.io
+    name: "${GROUP_PREFIX}tenant-${TENANT}"
+roleRef:
+  kind: ClusterRole
+  name: edit
+  apiGroup: rbac.authorization.k8s.io
+---
+# Read-only view of Kueue workloads/queues so users can see why they wait.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: tenant-${TENANT}-kueue-view
+  namespace: tenant-${TENANT}
+subjects:
+  - kind: Group
+    apiGroup: rbac.authorization.k8s.io
+    name: "${GROUP_PREFIX}tenant-${TENANT}"
+roleRef:
+  kind: ClusterRole
+  name: kueue-batch-user-role      # shipped by Kueue; check name: kubectl get clusterrole | grep kueue
+  apiGroup: rbac.authorization.k8s.io

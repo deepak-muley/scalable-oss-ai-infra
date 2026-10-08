@@ -1,0 +1,33 @@
+# Policies ship in Audit mode. Promote to Enforce via a PR (that's the GitOps way).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kyverno
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-4"
+spec:
+  project: ai-lab
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kyverno
+  sources:
+    - repoURL: https://kyverno.github.io/kyverno/
+      chart: kyverno
+      targetRevision: "*"
+    - repoURL: https://github.com/deepak-muley/scalable-oss-ai-infra.git
+      targetRevision: main
+      path: security/03-policy-kyverno/policies
+      directory:
+        include: '*.yaml'
+  syncPolicy:
+    automated:
+      selfHeal: true      # revert manual drift
+      prune: false        # lab safety: deleting a file does not delete CRDs/PVCs; flip once confident
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+      - SkipDryRunOnMissingResource=true
+    retry:
+      limit: 5
+      backoff: {duration: 10s, factor: 2, maxDuration: 5m}

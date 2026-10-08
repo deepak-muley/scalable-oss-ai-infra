@@ -1,0 +1,470 @@
+# model-release: data → train → register → deploy candidate → eval → gate → promote|reject
+#
+# Conceptually each step is one stage of lifecycle/ (01-data-prep … 05-eval-and-promote);
+# the manifests are inlined here so the pipeline is self-contained.
+#
+# Submit:  argo submit -n training --from workflowtemplate/model-release \
+#            -p run-name=gsm8k-lora-v1 -p threshold=0.25 --watch
+#
+# Prereqs: training/01 (MinIO + minio-creds), training/02 (MLflow),
+# training/03 (Kubeflow Trainer), training/04 (KubeRay), inference/01
+# (model-cache PVC), gateway/03 (route "lab-models" with alias lab-chat),
+# pipelines/01 (Argo + RBAC), scripts-configmap.yaml.
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: model-release
+  namespace: training
+spec:
+  serviceAccountName: model-release
+  entrypoint: release
+  onExit: notify
+  arguments:
+    parameters:
+      - name: run-name            # DNS-1123 (lowercase, digits, '-'): used in object names,
+        value: gsm8k-lora-v1      # S3 prefixes, the MLflow run and the served LoRA name
+      - name: base-model
+        value: Qwen/Qwen2.5-0.5B-Instruct
+      - name: dataset
+        value: openai/gsm8k
+      - name: dataset-config
+        value: main
+      - name: max-examples
+        value: "2000"
+      - name: threshold           # promotion gate on the eval score (0..1)
+        value: "0.25"
+      - name: eval-task
+        value: gsm8k
+      - name: eval-limit
+        value: "200"
+      - name: route-name          # AIGatewayRoute holding the lab-chat alias
+        value: lab-models
+
+  templates:
+    # ======================================================================
+    - name: release
+      dag:
+        tasks:
+          - name: data-prep
+            template: data-prep
+          - name: train-submit
+            template: train-submit
+            dependencies: [data-prep]
+          - name: train-wait
+            template: train-wait
+            dependencies: [train-submit]
+          - name: register
+            template: register
+            dependencies: [train-wait]
+          - name: deploy-candidate
+            template: deploy-candidate
+            dependencies: [register]
+          - name: eval
+            template: lm-eval
+            dependencies: [deploy-candidate]
+            arguments:
+              parameters:
+                - name: base-url
+                  value: "http://vllm-{{workflow.parameters.run-name}}.llm-serving.svc.cluster.local:8000"
+                - name: model
+                  value: "{{workflow.parameters.run-name}}"
+                - name: task
+                  value: "{{workflow.parameters.eval-task}}"
+                - name: limit
+                  value: "{{workflow.parameters.eval-limit}}"
+          # ---- the quality gate: exactly one of these runs ----
+          - name: promote
+            template: promote
+            dependencies: [eval]
+            when: "{{tasks.eval.outputs.parameters.score}} >= {{workflow.parameters.threshold}}"
+            arguments:
+              parameters:
+                - {name: version, value: "{{tasks.register.outputs.parameters.version}}"}
+          - name: reject
+            template: reject
+            dependencies: [eval]
+            when: "{{tasks.eval.outputs.parameters.score}} < {{workflow.parameters.threshold}}"
+
+    # ======================================================================
+    # (1) DATA PREP — Ray Data job on an ephemeral RayCluster.
+    # A "resource" template creates a K8s object and polls its status:
+    # Argo evaluates successCondition/failureCondition against the live object.
+    - name: data-prep
+      resource:
+        action: create
+        setOwnerReference: true          # deleting the Workflow cleans up the RayJob
+        successCondition: status.jobStatus == SUCCEEDED
+        failureCondition: status.jobStatus == FAILED
+        manifest: |
+          apiVersion: ray.io/v1
+          kind: RayJob
+          metadata:
+            name: prep-{{workflow.parameters.run-name}}
+            namespace: training
+            labels:
+              kueue.x-k8s.io/queue-name: research
+          spec:
+            entrypoint: >-
+              python /home/ray/scripts/prep.py
+              --dataset {{workflow.parameters.dataset}}
+              --config {{workflow.parameters.dataset-config}}
+              --limit {{workflow.parameters.max-examples}}
+              --out-prefix {{workflow.parameters.run-name}}
+            runtimeEnvYAML: |
+              pip: ["datasets", "boto3"]
+            shutdownAfterJobFinishes: true
+            ttlSecondsAfterFinished: 600
+            rayClusterSpec:
+              headGroupSpec:
+                rayStartParams: {dashboard-host: "0.0.0.0"}
+                template:
+                  spec:
+                    containers:
+                      - name: ray-head
+                        image: rayproject/ray:2.46.0-py311      # arm64 nodes: -aarch64 tag
+                        envFrom: [{secretRef: {name: minio-creds}}]
+                        resources:
+                          requests: {cpu: "2", memory: 4Gi}
+                          limits: {memory: 8Gi}
+                        volumeMounts: [{name: scripts, mountPath: /home/ray/scripts}]
+                    volumes:
+                      - {name: scripts, configMap: {name: model-release-scripts}}
+
+    # ======================================================================
+    # (2) TRAIN — LoRA SFT as a Kubeflow TrainJob (queued by Kueue).
+    - name: train-submit
+      resource:
+        action: create
+        setOwnerReference: true
+        # No successCondition: TrainJob reports completion through
+        # status.conditions[] (type Complete / Failed). Argo's condition syntax
+        # matches simple field paths, not "find the array element whose type is
+        # X", so we wait in the next step with kubectl instead.
+        manifest: |
+          apiVersion: trainer.kubeflow.org/v1alpha1
+          kind: TrainJob
+          metadata:
+            name: sft-{{workflow.parameters.run-name}}
+            namespace: training
+            labels:
+              kueue.x-k8s.io/queue-name: research
+          spec:
+            runtimeRef:
+              name: torch-distributed
+            trainer:
+              numNodes: 1
+              image: pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime
+              resourcesPerNode:
+                limits: {nvidia.com/gpu: 1}
+                requests: {cpu: "4", memory: 24Gi}
+              env:
+                - {name: RUN_NAME, value: "{{workflow.parameters.run-name}}"}
+                - {name: BASE_MODEL, value: "{{workflow.parameters.base-model}}"}
+                - {name: MLFLOW_TRACKING_URI, value: "http://mlflow.mlops.svc.cluster.local"}
+                - name: AWS_ACCESS_KEY_ID
+                  valueFrom: {secretKeyRef: {name: minio-creds, key: AWS_ACCESS_KEY_ID}}
+                - name: AWS_SECRET_ACCESS_KEY
+                  valueFrom: {secretKeyRef: {name: minio-creds, key: AWS_SECRET_ACCESS_KEY}}
+                - name: AWS_ENDPOINT_URL
+                  valueFrom: {secretKeyRef: {name: minio-creds, key: AWS_ENDPOINT_URL}}
+                - name: MLFLOW_S3_ENDPOINT_URL
+                  valueFrom: {secretKeyRef: {name: minio-creds, key: AWS_ENDPOINT_URL}}
+              command:
+                - bash
+                - -c
+                - |
+                  set -e
+                  pip install -q "transformers>=4.44" "peft>=0.12" boto3 mlflow
+                  cat > /tmp/sft.py <<'PY'
+                  import json, os, torch, boto3, mlflow
+                  from pathlib import Path
+                  from transformers import AutoTokenizer, AutoModelForCausalLM
+                  from peft import LoraConfig, get_peft_model
+
+                  run, base = os.environ["RUN_NAME"], os.environ["BASE_MODEL"]
+                  s3 = boto3.client("s3")
+                  rows = []
+                  for page in s3.get_paginator("list_objects_v2").paginate(Bucket="datasets", Prefix=run + "/"):
+                      for o in page.get("Contents", []):
+                          body = s3.get_object(Bucket="datasets", Key=o["Key"])["Body"].read().decode()
+                          rows += [json.loads(l) for l in body.splitlines() if l.strip()]
+                  print("examples:", len(rows), flush=True)
+
+                  tok = AutoTokenizer.from_pretrained(base)
+                  model = AutoModelForCausalLM.from_pretrained(base, torch_dtype=torch.bfloat16).cuda()
+                  model = get_peft_model(model, LoraConfig(r=16, lora_alpha=32, lora_dropout=0.05,
+                      task_type="CAUSAL_LM", target_modules=["q_proj", "k_proj", "v_proj", "o_proj"]))
+                  opt = torch.optim.AdamW(model.parameters(), lr=2e-4)
+                  accum = 8
+
+                  mlflow.set_experiment("model-release")
+                  with mlflow.start_run(run_name=run):
+                      mlflow.log_params({"base_model": base, "examples": len(rows), "r": 16, "lr": 2e-4, "accum": accum})
+                      model.train()
+                      for i, row in enumerate(rows):
+                          ids = tok.apply_chat_template(row["messages"], tokenize=True, return_tensors="pt")[0][:1024]
+                          ids = ids.unsqueeze(0).cuda()
+                          loss = model(input_ids=ids, labels=ids).loss / accum
+                          loss.backward()
+                          if (i + 1) % accum == 0:
+                              opt.step(); opt.zero_grad()
+                          if i % 100 == 0:
+                              print(f"step {i} loss {loss.item() * accum:.4f}", flush=True)
+                              mlflow.log_metric("loss", loss.item() * accum, step=i)
+                      out = Path("/tmp/adapter"); model.save_pretrained(out); tok.save_pretrained(out)
+                      for f in out.rglob("*"):
+                          if f.is_file():
+                              s3.upload_file(str(f), "checkpoints", f"adapters/{run}/{f.relative_to(out)}")
+                      mlflow.set_tag("adapter_uri", f"s3://checkpoints/adapters/{run}")
+                  print("adapter uploaded", flush=True)
+                  PY
+                  python /tmp/sft.py
+
+    - name: train-wait
+      activeDeadlineSeconds: 21600       # 6h budget for training
+      retryStrategy: {limit: 3, retryPolicy: OnError}
+      container:
+        image: alpine/k8s:1.31.4         # kubectl + jq + bash; pin to your cluster minor
+        command: [bash, -c]
+        args:
+          - |
+            set -u
+            J=sft-{{workflow.parameters.run-name}}
+            while true; do
+              # TrainJob v2 sets conditions like Created / Suspended / Complete / Failed
+              c=$(kubectl -n training get trainjob "$J" \
+                    -o jsonpath='{.status.conditions[?(@.status=="True")].type}')
+              echo "$(date +%T) conditions=[$c]"
+              case " $c " in
+                *" Complete "*) exit 0 ;;
+                *" Failed "*)   kubectl -n training describe trainjob "$J" | tail -20; exit 1 ;;
+              esac
+              sleep 30
+            done
+
+    # ======================================================================
+    # (3) REGISTER — create a model version in the MLflow registry and give
+    # it the "candidate" alias. Output: version number.
+    - name: register
+      outputs:
+        parameters:
+          - name: version
+            valueFrom: {path: /tmp/version}
+      script:
+        image: python:3.12-slim
+        env:
+          - {name: MLFLOW_TRACKING_URI, value: "http://mlflow.mlops.svc.cluster.local"}
+          - {name: RUN_NAME, value: "{{workflow.parameters.run-name}}"}
+        command: [bash]
+        source: |
+          set -e
+          pip install -q mlflow
+          python - <<'PY'
+          import os
+          from mlflow import MlflowClient
+          c, run = MlflowClient(), os.environ["RUN_NAME"]
+          name = "lab-assistant"
+          exp = c.get_experiment_by_name("model-release")
+          runs = c.search_runs([exp.experiment_id], filter_string=f"attributes.run_name = '{run}'",
+                               order_by=["attributes.start_time DESC"], max_results=1)
+          run_id = runs[0].info.run_id if runs else ""
+          try:
+              c.create_registered_model(name)
+          except Exception:
+              pass   # already exists
+          mv = c.create_model_version(name, source=f"s3://checkpoints/adapters/{run}",
+                                      tags={"training_run_id": run_id, "run_name": run})
+          c.set_registered_model_alias(name, "candidate", mv.version)
+          print("registered", name, "version", mv.version)
+          open("/tmp/version", "w").write(str(mv.version))
+          PY
+
+    # ======================================================================
+    # (4) DEPLOY CANDIDATE — base model + the new LoRA adapter on vLLM.
+    # It's a separate Deployment, so production traffic is untouched until promotion.
+    - name: deploy-candidate
+      activeDeadlineSeconds: 3600
+      container:
+        image: alpine/k8s:1.31.4
+        command: [bash, -c]
+        args:
+          - |
+            set -e
+            RUN={{workflow.parameters.run-name}}
+            cat <<EOF | kubectl apply -f -
+            apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              name: vllm-${RUN}
+              namespace: llm-serving
+              labels: {app: vllm-${RUN}, ai.lab/release-candidate: "true"}
+            spec:
+              replicas: 1
+              selector: {matchLabels: {app: vllm-${RUN}}}
+              template:
+                metadata:
+                  labels: {app: vllm-${RUN}, ai.lab/inference-engine: vllm}
+                spec:
+                  runtimeClassName: nvidia
+                  initContainers:
+                    - name: sync-adapter
+                      image: amazon/aws-cli:2.17.0
+                      envFrom: [{secretRef: {name: minio-creds}}]
+                      command: ["aws", "s3", "sync", "s3://checkpoints/adapters/${RUN}/", "/models/adapters/${RUN}/"]
+                      volumeMounts: [{name: models, mountPath: /models}]
+                  containers:
+                    - name: vllm
+                      image: vllm/vllm-openai:v0.10.2
+                      command: ["vllm", "serve"]
+                      args:
+                        - {{workflow.parameters.base-model}}
+                        - --port=8000
+                        - --enable-lora
+                        - --max-lora-rank=64
+                        - --lora-modules
+                        - ${RUN}=/models/adapters/${RUN}
+                        - --gpu-memory-utilization=0.85
+                        - --max-model-len=4096
+                      env: [{name: HF_HOME, value: /models/hf}]
+                      ports: [{name: http, containerPort: 8000}]
+                      readinessProbe: {httpGet: {path: /health, port: 8000}, periodSeconds: 5}
+                      startupProbe: {httpGet: {path: /health, port: 8000}, periodSeconds: 10, failureThreshold: 90}
+                      resources:
+                        requests: {cpu: "4", memory: 16Gi}
+                        limits: {nvidia.com/gpu: 1}
+                      volumeMounts: [{name: models, mountPath: /models}]
+                  volumes:
+                    - {name: models, persistentVolumeClaim: {claimName: model-cache}}
+            ---
+            apiVersion: v1
+            kind: Service
+            metadata:
+              name: vllm-${RUN}
+              namespace: llm-serving
+            spec:
+              selector: {app: vllm-${RUN}}
+              ports: [{name: http, port: 8000, targetPort: 8000}]
+            EOF
+            kubectl -n llm-serving rollout status deploy/vllm-${RUN} --timeout=50m
+
+    # ======================================================================
+    # (5) EVAL — reusable template (also used by the nightly CronWorkflow).
+    # Output "score" drives the gate in the DAG.
+    - name: lm-eval
+      inputs:
+        parameters:
+          - name: base-url
+          - name: model
+          - name: task
+            value: gsm8k
+          - name: limit
+            value: "200"
+      outputs:
+        parameters:
+          - name: score
+            valueFrom: {path: /tmp/score}
+      activeDeadlineSeconds: 7200
+      container:
+        image: python:3.12-slim
+        env:
+          - {name: BASE_URL, value: "{{inputs.parameters.base-url}}"}
+          - {name: MODEL, value: "{{inputs.parameters.model}}"}
+          - {name: TASK, value: "{{inputs.parameters.task}}"}
+          - {name: LIMIT, value: "{{inputs.parameters.limit}}"}
+          - {name: OPENAI_API_KEY, value: EMPTY}
+        resources:
+          requests: {cpu: "1", memory: 2Gi}
+        command: [bash, -c]
+        args:
+          - |
+            set -e
+            pip install -q "lm-eval[api]"
+            lm_eval --model local-chat-completions \
+              --model_args "model=${MODEL},base_url=${BASE_URL}/v1/chat/completions,num_concurrent=8,max_retries=3,tokenized_requests=False" \
+              --tasks "${TASK}" --apply_chat_template --fewshot_as_multiturn \
+              --limit "${LIMIT}" --output_path /tmp/out
+            python - <<'PY'
+            import glob, json
+            f = sorted(glob.glob("/tmp/out/**/*.json", recursive=True))[-1]
+            res = json.load(open(f))["results"]
+            task = next(iter(res))
+            vals = {k: v for k, v in res[task].items()
+                    if k.startswith(("exact_match", "acc")) and "stderr" not in k and isinstance(v, (int, float))}
+            score = max(vals.values()) if vals else 0.0
+            print("metrics:", vals, "-> score", score)
+            open("/tmp/score", "w").write(f"{score:.4f}")
+            PY
+
+    # ======================================================================
+    # (6)+(7) PROMOTE — point the public alias "lab-chat" at the candidate.
+    #
+    # GitOps caveat: if Argo CD manages the route (gitops/…/42-ai-routes.yaml,
+    # selfHeal: true) it will REVERT this in-cluster patch. Two fixes:
+    #   a) promotion = git commit: replace this step with one that opens a PR
+    #      editing gateway/03-ai-routes/ai-gateway-route.yaml (the GitOps way)
+    #   b) let the pipeline own the alias: ignoreDifferences on /spec/rules
+    #      in that Application.
+    # See docs/15-gitops-and-pipelines.md.
+    - name: promote
+      inputs:
+        parameters:
+          - name: version
+      container:
+        image: alpine/k8s:1.31.4
+        env:
+          - {name: MLFLOW, value: "http://mlflow.mlops.svc.cluster.local"}
+        command: [bash, -c]
+        args:
+          - |
+            set -euo pipefail
+            RUN={{workflow.parameters.run-name}}
+            ROUTE={{workflow.parameters.route-name}}
+            cat <<EOF | kubectl apply -f -
+            apiVersion: gateway.envoyproxy.io/v1alpha1
+            kind: Backend
+            metadata: {name: release-${RUN}, namespace: ai-gateway}
+            spec:
+              endpoints:
+                - fqdn: {hostname: vllm-${RUN}.llm-serving.svc.cluster.local, port: 8000}
+            ---
+            apiVersion: aigateway.envoyproxy.io/v1alpha1
+            kind: AIServiceBackend
+            metadata: {name: release-${RUN}, namespace: ai-gateway}
+            spec:
+              schema: {name: OpenAI}
+              backendRef: {name: release-${RUN}, kind: Backend, group: gateway.envoyproxy.io}
+            EOF
+            # Rewrite only the rule that matches model "lab-chat".
+            kubectl -n ai-gateway get aigatewayroute "$ROUTE" -o json \
+              | jq --arg b "release-${RUN}" --arg m "${RUN}" '
+                  del(.metadata.managedFields)
+                  | (.spec.rules[] | select(any(.matches[]?.headers[]?; .value == "lab-chat")) | .backendRefs)
+                    |= [{name: $b, modelNameOverride: $m}]' \
+              | kubectl replace -f -
+            echo "lab-chat -> ${RUN}"
+            # Mirror the decision in the registry (alias = what production serves).
+            curl -sf -X POST "$MLFLOW/api/2.0/mlflow/registered-models/alias" \
+              -H 'content-type: application/json' \
+              -d "{\"name\":\"lab-assistant\",\"alias\":\"production\",\"version\":\"{{inputs.parameters.version}}\"}" \
+              && echo "MLflow alias production -> v{{inputs.parameters.version}}"
+
+    # (8) REJECT — free the GPU; keep the adapter + MLflow record for analysis.
+    - name: reject
+      container:
+        image: alpine/k8s:1.31.4
+        command: [bash, -c]
+        args:
+          - |
+            RUN={{workflow.parameters.run-name}}
+            echo "score below {{workflow.parameters.threshold}}: rejecting ${RUN}"
+            kubectl -n llm-serving delete deploy/vllm-${RUN} svc/vllm-${RUN} --ignore-not-found
+
+    # Exit handler: always runs. Wire Slack/Alertmanager here.
+    - name: notify
+      container:
+        image: alpine/k8s:1.31.4
+        command: [bash, -c]
+        args:
+          - |
+            echo "model-release {{workflow.parameters.run-name}}: {{workflow.status}}"
+            # curl -X POST -d '{"text":"..."}' "$SLACK_WEBHOOK_URL"

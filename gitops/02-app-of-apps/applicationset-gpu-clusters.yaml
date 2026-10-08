@@ -1,0 +1,73 @@
+# Multi-cluster rollout: stamp a set of components onto EVERY cluster that
+# Argo CD knows about and that carries the label ai.lab/role=gpu-cluster.
+#
+# Register a cluster with the label:
+#   argocd cluster add <kube-context> --name gpu-b --label ai.lab/role=gpu-cluster
+# (kind: use `kind get kubeconfig --internal --name ai-lab-2` so the API
+#  server address is reachable from inside the management cluster.)
+#
+# matrix = clusters × components  ->  one Application per (cluster, component)
+# This file is deliberately NOT inside apps/: apply it when you have >1 cluster.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: gpu-cluster-baseline
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - matrix:
+        generators:
+          - clusters:
+              selector:
+                matchLabels:
+                  ai.lab/role: gpu-cluster
+          - list:
+              elements:
+                - component: namespaces
+                  path: platform/01-namespaces
+                  include: namespaces.yaml
+                  namespace: default
+                  wave: "-9"
+                - component: kueue-queues
+                  path: platform/09-kueue
+                  include: queues.yaml
+                  namespace: kueue-system
+                  wave: "-4"
+                - component: kyverno-policies
+                  path: security/03-policy-kyverno/policies
+                  include: "*.yaml"
+                  namespace: kyverno
+                  wave: "-4"
+  # Roll out one cluster at a time instead of all at once — the hyperscale
+  # habit that limits blast radius (requires the progressive syncs feature,
+  # enabled with applicationsetcontroller.enable.progressive.syncs=true).
+  # strategy:
+  #   type: RollingSync
+  #   rollingSync:
+  #     steps:
+  #       - matchExpressions: [{key: env, operator: In, values: [canary]}]
+  #       - matchExpressions: [{key: env, operator: In, values: [prod]}]
+  template:
+    metadata:
+      name: '{{.name}}-{{.component}}'
+      annotations:
+        argocd.argoproj.io/sync-wave: '{{.wave}}'
+      labels:
+        cluster: '{{.name}}'
+        component: '{{.component}}'
+    spec:
+      project: ai-lab
+      source:
+        repoURL: https://github.com/deepak-muley/scalable-oss-ai-infra.git
+        targetRevision: main
+        path: '{{.path}}'
+        directory:
+          include: '{{.include}}'
+      destination:
+        server: '{{.server}}'
+        namespace: '{{.namespace}}'
+      syncPolicy:
+        automated: {selfHeal: true, prune: false}
+        syncOptions: [CreateNamespace=true, SkipDryRunOnMissingResource=true]

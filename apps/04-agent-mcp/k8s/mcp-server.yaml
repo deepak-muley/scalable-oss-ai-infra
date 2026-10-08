@@ -1,0 +1,69 @@
+# Least privilege: the agent's tools can only READ pods. No secrets, no exec,
+# no writes. An LLM deciding which tool to call is untrusted input.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: mcp-lab-tools
+  namespace: apps
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: mcp-lab-tools-readonly
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: mcp-lab-tools-readonly
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: mcp-lab-tools-readonly
+subjects:
+  - kind: ServiceAccount
+    name: mcp-lab-tools
+    namespace: apps
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mcp-lab-tools
+  namespace: apps
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: mcp-lab-tools}}
+  template:
+    metadata:
+      labels: {app: mcp-lab-tools}
+    spec:
+      serviceAccountName: mcp-lab-tools
+      securityContext: {runAsNonRoot: true, runAsUser: 10001}
+      containers:
+        - name: mcp
+          image: mcp-lab-tools:0.1        # build from this folder; kind load docker-image
+          imagePullPolicy: IfNotPresent
+          env:
+            - {name: PROM_URL, value: "http://kps-prometheus.monitoring.svc:9090"}
+            - {name: RAG_URL, value: "http://rag-app.apps.svc.cluster.local"}
+            - {name: ALLOWED_NAMESPACES, value: "llm-serving,training,evaluation,ai-gateway,apps"}
+          ports: [{name: mcp, containerPort: 8000}]
+          readinessProbe: {tcpSocket: {port: 8000}, periodSeconds: 5}
+          resources:
+            requests: {cpu: 50m, memory: 128Mi}
+            limits: {memory: 256Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcp-lab-tools
+  namespace: apps
+spec:
+  selector: {app: mcp-lab-tools}
+  ports: [{name: mcp, port: 8000, targetPort: 8000}]

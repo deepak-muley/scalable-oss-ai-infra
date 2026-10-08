@@ -44,8 +44,31 @@ security() {
   "${ROOT}/security/05-vuln-trivy/install.sh"
 }
 
+# ---- optional layers (not part of "all") ----
+observability() {
+  kubectl apply -f "${ROOT}/observability/01-dashboards/" -f "${ROOT}/observability/02-alerts/"
+  "${ROOT}/observability/03-tracing/install.sh"
+  "${ROOT}/observability/04-logs/install.sh"
+  "${ROOT}/observability/05-cost/install.sh"
+}
+reliability() {
+  "${ROOT}/reliability/01-chaos-mesh/install.sh"
+  "${ROOT}/reliability/03-gpu-health/install.sh"
+}
+ops() {
+  "${ROOT}/pipelines/01-argo-workflows/install.sh"
+  "${ROOT}/ops/01-backup-velero/install.sh"
+  kubectl apply -f "${ROOT}/ops/02-image-prepull/prepull-daemonset.yaml"
+}
+apps() {
+  "${ROOT}/apps/02-vector-db/install.sh"
+  "${ROOT}/apps/01-open-webui/install.sh"
+  "${ROOT}/workbench/01-jupyterhub/install.sh"
+}
+
+LAYERS="platform|security|gateway|inference|training|observability|reliability|ops|apps"
 case "$LAYER" in
-  platform|gateway|inference|training|security) "$LAYER" ;;
+  platform|gateway|inference|training|security|observability|reliability|ops|apps) "$LAYER" ;;
   all) platform; security; gateway; inference; training ;;
-  *) echo "usage: $0 [all|platform|security|gateway|inference|training]"; exit 1 ;;
+  *) echo "usage: $0 [all|${LAYERS}]   (GitOps alternative: gitops/README.md)"; exit 1 ;;
 esac

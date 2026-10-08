@@ -1,0 +1,37 @@
+# Full reference: helm show values argo/argo-workflows
+controller:
+  # Namespaces where Workflows may run (controller gets RBAC there).
+  workflowNamespaces: [argo, training, evaluation, llm-serving]
+  workflowDefaults:
+    spec:
+      ttlStrategy:
+        secondsAfterCompletion: 172800   # keep finished workflows 2 days
+      podGC:
+        strategy: OnPodSuccess           # keep failed pods for debugging
+  resources:
+    requests: {cpu: 100m, memory: 256Mi}
+
+server:
+  # LAB ONLY: no login. Older chart versions use:  extraArgs: [--auth-mode=server]
+  authModes: [server]
+  resources:
+    requests: {cpu: 50m, memory: 128Mi}
+
+# Logs + artifacts -> MinIO (training/01-object-storage). The bucket "mlflow"
+# already exists; we use a key prefix instead of creating another bucket.
+# The minio-creds Secret must exist in each namespace that runs workflows
+# (training/01 install.sh creates it in training, llm-serving, evaluation).
+useStaticCredentials: true
+artifactRepository:
+  archiveLogs: true
+  s3:
+    bucket: mlflow
+    endpoint: minio.mlops.svc.cluster.local:9000
+    insecure: true
+    keyFormat: "argo-artifacts/{{workflow.namespace}}/{{workflow.name}}/{{pod.name}}"
+    accessKeySecret:
+      name: minio-creds
+      key: AWS_ACCESS_KEY_ID
+    secretKeySecret:
+      name: minio-creds
+      key: AWS_SECRET_ACCESS_KEY

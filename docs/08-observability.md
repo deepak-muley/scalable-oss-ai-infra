@@ -51,7 +51,7 @@ see the names your version uses.)
 
 | Alert | Expression idea |
 |---|---|
-| GPU XID error | `increase(DCGM_FI_DEV_XID_ERRORS[5m]) > 0` → cordon the node and investigate |
+| GPU XID error | `DCGM_FI_DEV_XID_ERRORS > 0` or `changes(DCGM_FI_DEV_XID_ERRORS[10m]) > 0` (the metric holds the *last XID code*, not a count) → cordon the node and investigate. Full rules: `observability/02-alerts` |
 | GPU too hot | `DCGM_FI_DEV_GPU_TEMP > 85` |
 | Model queueing | `sum by (model_name)(vllm:num_requests_waiting) > 20 for 5m` |
 | KV cache saturated | `vllm:gpu_cache_usage_perc > 0.95 for 10m` (preemptions coming) |

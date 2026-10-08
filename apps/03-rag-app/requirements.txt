@@ -1,0 +1,5 @@
+fastapi>=0.110
+uvicorn[standard]>=0.29
+httpx>=0.27
+qdrant-client>=1.10    # query_points() API
+pydantic>=2

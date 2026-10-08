@@ -1,0 +1,40 @@
+# Prereq (not in git): kubectl -n llm-serving create secret generic hf-token ...
+# or the ESO ExternalSecret. Replicas are ignored so KEDA can scale engines
+# without Argo CD scaling them back (selfHeal would otherwise fight the HPA).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: vllm-stack
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  project: ai-lab
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: llm-serving
+  sources:
+    - repoURL: https://vllm-project.github.io/production-stack
+      chart: vllm-stack
+      targetRevision: "*"
+      helm:
+        releaseName: vllm
+        valueFiles:
+          - $values/inference/04-production-stack/values-1gpu.yaml
+    - repoURL: https://github.com/deepak-muley/scalable-oss-ai-infra.git
+      targetRevision: main
+      ref: values          # lets other sources use $values/<path>
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers: [/spec/replicas]
+  syncPolicy:
+    automated:
+      selfHeal: true      # revert manual drift
+      prune: false        # lab safety: deleting a file does not delete CRDs/PVCs; flip once confident
+    syncOptions:
+      - CreateNamespace=true
+      - RespectIgnoreDifferences=true
+    retry:
+      limit: 5
+      backoff: {duration: 10s, factor: 2, maxDuration: 5m}

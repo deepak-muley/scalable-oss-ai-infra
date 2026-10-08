@@ -1,0 +1,38 @@
+# Time-slicing ConfigMap is NOT included: it changes how many GPUs nodes
+# advertise. Add platform/05-gpu-operator/time-slicing-config.yaml as a
+# directory source deliberately if you want it.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: gpu-operator
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-7"
+spec:
+  project: ai-lab
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: gpu-operator
+  sources:
+    - repoURL: https://helm.ngc.nvidia.com/nvidia
+      chart: gpu-operator
+      targetRevision: "v25.3.2"
+      helm:
+        valueFiles:
+          - $values/platform/05-gpu-operator/values.yaml
+        parameters:
+          - name: driver.enabled
+            value: "false"   # true if hosts have no NVIDIA driver
+    - repoURL: https://github.com/deepak-muley/scalable-oss-ai-infra.git
+      targetRevision: main
+      ref: values          # lets other sources use $values/<path>
+  syncPolicy:
+    automated:
+      selfHeal: true      # revert manual drift
+      prune: false        # lab safety: deleting a file does not delete CRDs/PVCs; flip once confident
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff: {duration: 10s, factor: 2, maxDuration: 5m}

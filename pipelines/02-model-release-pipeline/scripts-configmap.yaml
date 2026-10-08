@@ -1,0 +1,53 @@
+# Code for the data-prep step, mounted into the RayJob head. (Real setups
+# bake it into a versioned image; a ConfigMap keeps the lab readable.)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: model-release-scripts
+  namespace: training
+data:
+  prep.py: |
+    """Dataset -> chat-format JSONL shards in s3://datasets/<out-prefix>/ using Ray Data.
+
+    This is where a lab does the heavy lifting at scale: dedup, quality
+    filtering, PII scrubbing, eval decontamination, tokenization. Here we keep
+    a single filter so the shape is visible.
+    """
+    import argparse, glob, os, tempfile
+    import boto3, ray
+    from datasets import load_dataset
+
+    p = argparse.ArgumentParser()
+    p.add_argument("--dataset", required=True)
+    p.add_argument("--config", default="")
+    p.add_argument("--split", default="train")
+    p.add_argument("--limit", type=int, default=0)
+    p.add_argument("--out-prefix", required=True)
+    a = p.parse_args()
+
+    ray.init()
+    hf = load_dataset(a.dataset, a.config or None, split=a.split)
+    if a.limit:
+        hf = hf.select(range(min(a.limit, len(hf))))
+
+    def to_chat(row):
+        if "question" in row and "answer" in row:            # gsm8k-style
+            q, ans = row["question"], row["answer"]
+        elif "instruction" in row and "output" in row:       # alpaca-style
+            q = (row["instruction"] + "\n" + (row.get("input") or "")).strip()
+            ans = row["output"]
+        else:
+            raise ValueError(f"unknown schema: {list(row)}")
+        return {"messages": [{"role": "user", "content": q},
+                             {"role": "assistant", "content": ans}]}
+
+    ds = ray.data.from_huggingface(hf).map(to_chat)
+    ds = ds.filter(lambda r: 0 < len(r["messages"][1]["content"]) < 4000)
+
+    out = tempfile.mkdtemp()
+    ds.write_json(out)                       # JSONL shards, one per block
+    s3 = boto3.client("s3")
+    shards = glob.glob(os.path.join(out, "*.json"))
+    for f in shards:
+        s3.upload_file(f, "datasets", f"{a.out_prefix}/{os.path.basename(f)}")
+    print(f"uploaded {len(shards)} shards to s3://datasets/{a.out_prefix}/")

@@ -1,0 +1,49 @@
+# Full-parameter SFT. 0.5B params x ~16 bytes (weights+grads+Adam) ≈ 8 GB plus
+# activations (gradient checkpointing on) fits a 24 GB GPU. For 7B+ you'd
+# switch to FSDP or LoRA (see training/05-jobs/trainjob-lora-finetune.yaml).
+# Same podSpecOverrides caveat as lifecycle/02-pretrain/trainjob-pretrain.yaml.
+apiVersion: trainer.kubeflow.org/v1alpha1
+kind: TrainJob
+metadata:
+  name: sft
+  namespace: training
+  labels:
+    kueue.x-k8s.io/queue-name: research
+spec:
+  runtimeRef:
+    name: torch-distributed
+  trainer:
+    numNodes: 1
+    image: pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime
+    command:
+      - bash
+      - -c
+      - pip install -q boto3 mlflow "transformers>=4.44" accelerate && torchrun /scripts/sft.py
+    env:
+      - {name: BASE_MODEL, value: "BASE_MODEL_VALUE"}
+      - {name: OUT_NAME, value: "OUT_NAME_VALUE"}
+      - {name: OUT_VERSION, value: "OUT_VERSION_VALUE"}
+      - {name: LR, value: "LR_VALUE"}
+      - {name: DATA_URI, value: "s3://datasets/sft/ultrachat/train.jsonl"}
+      - {name: HF_HOME, value: /tmp/hf}
+      - {name: MLFLOW_TRACKING_URI, value: http://mlflow.mlops.svc.cluster.local}
+      - name: HF_TOKEN
+        valueFrom: {secretKeyRef: {name: hf-token, key: token, optional: true}}
+      - name: AWS_ACCESS_KEY_ID
+        valueFrom: {secretKeyRef: {name: minio-creds, key: AWS_ACCESS_KEY_ID}}
+      - name: AWS_SECRET_ACCESS_KEY
+        valueFrom: {secretKeyRef: {name: minio-creds, key: AWS_SECRET_ACCESS_KEY}}
+      - name: AWS_ENDPOINT_URL
+        valueFrom: {secretKeyRef: {name: minio-creds, key: AWS_ENDPOINT_URL}}
+      - name: MLFLOW_S3_ENDPOINT_URL
+        valueFrom: {secretKeyRef: {name: minio-creds, key: MLFLOW_S3_ENDPOINT_URL}}
+    resourcesPerNode:
+      limits: {nvidia.com/gpu: 1}
+      requests: {cpu: "4", memory: 32Gi}
+  podSpecOverrides:
+    - targetJobs: [{name: node}]
+      volumes:
+        - {name: scripts, configMap: {name: sft-script}}
+      containers:
+        - name: node
+          volumeMounts: [{name: scripts, mountPath: /scripts}]

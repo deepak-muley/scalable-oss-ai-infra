@@ -1,0 +1,13 @@
+# Shared RWX volume so actor checkpoints written on any Ray pod are visible to
+# the merge/upload step (and to multi-node runs). nfs-client from platform/04.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: rl-checkpoints
+  namespace: training
+spec:
+  accessModes: [ReadWriteMany]
+  storageClassName: nfs-client
+  resources:
+    requests:
+      storage: 100Gi

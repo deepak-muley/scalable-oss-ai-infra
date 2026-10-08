@@ -1,0 +1,36 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cert-manager
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-8"
+spec:
+  project: ai-lab
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cert-manager
+  sources:
+    - repoURL: https://charts.jetstack.io
+      chart: cert-manager
+      targetRevision: "v1.18.2"
+      helm:
+        valuesObject:
+          crds:
+            enabled: true
+    - repoURL: https://github.com/deepak-muley/scalable-oss-ai-infra.git
+      targetRevision: main
+      path: platform/03-cert-manager
+      directory:
+        include: 'selfsigned-issuer.yaml'
+  syncPolicy:
+    automated:
+      selfHeal: true      # revert manual drift
+      prune: false        # lab safety: deleting a file does not delete CRDs/PVCs; flip once confident
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+      - SkipDryRunOnMissingResource=true
+    retry:
+      limit: 5
+      backoff: {duration: 10s, factor: 2, maxDuration: 5m}

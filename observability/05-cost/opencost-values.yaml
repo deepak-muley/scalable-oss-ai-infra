@@ -1,0 +1,27 @@
+opencost:
+  exporter:
+    defaultClusterId: ai-lab
+  prometheus:
+    internal:
+      enabled: true
+      serviceName: kps-prometheus
+      namespaceName: monitoring
+      port: 9090
+  metrics:
+    serviceMonitor:
+      enabled: true          # OpenCost's own metrics (node_gpu_hourly_cost, container_gpu_allocation, ...)
+  ui:
+    enabled: true
+  # On-prem / lab pricing: amortized hardware + power + hosting, per hour.
+  customPricing:
+    enabled: true
+    provider: custom
+    costModel:
+      description: "AI lab amortized pricing (EDIT ME)"
+      CPU: "0.02"            # per vCPU-hour
+      RAM: "0.003"           # per GiB-hour
+      GPU: "1.20"            # per GPU-hour  <- the number that matters
+      storage: "0.00005"     # per GiB-hour
+      zoneNetworkEgress: "0"
+      regionNetworkEgress: "0"
+      internetNetworkEgress: "0"

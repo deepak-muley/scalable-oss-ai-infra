@@ -1,0 +1,25 @@
+# The ONE object you apply by hand. It points Argo CD at apps/, and every
+# file in apps/ is itself an Application (or the AppProject). Argo CD syncs
+# them wave by wave; each child then syncs its own component.
+#
+#   kubectl apply -f gitops/02-app-of-apps/root-app.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ai-lab-root
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/deepak-muley/scalable-oss-ai-infra.git
+    targetRevision: main
+    path: gitops/02-app-of-apps/apps
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true          # removing a file from apps/ removes that child Application
+                           # (children have no resources-finalizer, so their
+                           #  workloads are left running: safe default for a lab)

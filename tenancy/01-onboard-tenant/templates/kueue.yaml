@@ -1,0 +1,41 @@
+# The tenant's slice of the GPU pool. Same cohort as the platform queues
+# (ai-lab) so idle GPUs can be lent/borrowed and reclaimed by preemption.
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: ClusterQueue
+metadata:
+  name: tenant-${TENANT}
+  labels: {ai.lab/tenant: "${TENANT}"}
+spec:
+  cohort: ai-lab
+  namespaceSelector:
+    matchLabels:
+      ai.lab/tenant: "${TENANT}"            # only this tenant's namespace may use it
+  queueingStrategy: BestEffortFIFO
+  preemption:
+    reclaimWithinCohort: Any
+    borrowWithinCohort:
+      policy: LowerPriority
+    withinClusterQueue: LowerPriority
+  # Effective only when fair sharing is enabled in the Kueue config.
+  fairSharing:
+    weight: "${FAIR_WEIGHT}"
+  resourceGroups:
+    - coveredResources: ["cpu", "memory", "nvidia.com/gpu"]
+      flavors:
+        - name: gpu-default
+          resources:
+            - name: cpu
+              nominalQuota: "${CPU_QUOTA}"
+            - name: memory
+              nominalQuota: "${MEM_QUOTA}"
+            - name: nvidia.com/gpu
+              nominalQuota: "${GPU_QUOTA}"
+              borrowingLimit: "${GPU_BORROW_LIMIT}"
+---
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: LocalQueue
+metadata:
+  name: default
+  namespace: tenant-${TENANT}
+spec:
+  clusterQueue: tenant-${TENANT}

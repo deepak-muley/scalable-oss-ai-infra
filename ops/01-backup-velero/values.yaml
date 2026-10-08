@@ -1,0 +1,21 @@
+# The AWS plugin version must match your Velero version (see the Velero compatibility matrix).
+initContainers:
+  - name: velero-plugin-for-aws
+    image: velero/velero-plugin-for-aws:v1.12.0
+    volumeMounts:
+      - {mountPath: /target, name: plugins}
+credentials:
+  existingSecret: velero-minio          # created by install.sh (key: cloud)
+configuration:
+  backupStorageLocation:
+    - name: default
+      provider: aws
+      bucket: velero
+      config:
+        region: minio
+        s3ForcePathStyle: "true"
+        s3Url: http://minio.mlops.svc.cluster.local:9000
+  volumeSnapshotLocation: []            # no CSI snapshots in the lab; use file-system backup
+  defaultVolumesToFsBackup: false       # opt-in per pod/namespace (see schedules.yaml)
+deployNodeAgent: true                   # file-system (Kopia) backup of PVC contents
+snapshotsEnabled: false

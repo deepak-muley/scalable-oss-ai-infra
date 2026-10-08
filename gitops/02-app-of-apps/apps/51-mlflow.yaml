@@ -1,0 +1,32 @@
+# S3 keys for artifacts: inject via the chart's existing-secret options or ESO (not git).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: mlflow
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  project: ai-lab
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: mlops
+  sources:
+    - repoURL: https://community-charts.github.io/helm-charts
+      chart: mlflow
+      targetRevision: "*"
+      helm:
+        valueFiles:
+          - $values/training/02-mlflow/values.yaml
+    - repoURL: https://github.com/deepak-muley/scalable-oss-ai-infra.git
+      targetRevision: main
+      ref: values          # lets other sources use $values/<path>
+  syncPolicy:
+    automated:
+      selfHeal: true      # revert manual drift
+      prune: false        # lab safety: deleting a file does not delete CRDs/PVCs; flip once confident
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff: {duration: 10s, factor: 2, maxDuration: 5m}

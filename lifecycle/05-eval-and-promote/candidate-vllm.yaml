@@ -1,0 +1,48 @@
+# Serves the candidate under the stable name "candidate" so evals, the gateway
+# alias and canaries don't need to know the version string.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-candidate
+  namespace: llm-serving
+  labels: {app: vllm-candidate}
+  annotations:
+    ai.lab/model: "MODEL_NAME_VALUE/MODEL_VERSION_VALUE"
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector: {matchLabels: {app: vllm-candidate}}
+  template:
+    metadata:
+      labels: {app: vllm-candidate, ai.lab/inference-engine: vllm}
+    spec:
+      runtimeClassName: nvidia
+      containers:
+        - name: vllm
+          image: vllm/vllm-openai:v0.10.2
+          command: ["vllm", "serve"]
+          args:
+            - /models/registry/MODEL_NAME_VALUE/MODEL_VERSION_VALUE
+            - --served-model-name=candidate
+            - --port=8000
+            - --max-model-len=MAX_LEN_VALUE         # toy GPT: 1024 (its context size)
+            - --gpu-memory-utilization=0.85
+            - --enable-prefix-caching
+          ports: [{name: http, containerPort: 8000}]
+          readinessProbe: {httpGet: {path: /health, port: 8000}, periodSeconds: 5}
+          startupProbe: {httpGet: {path: /health, port: 8000}, periodSeconds: 10, failureThreshold: 60}
+          resources:
+            requests: {cpu: "4", memory: 16Gi}
+            limits: {nvidia.com/gpu: 1}
+          volumeMounts: [{name: models, mountPath: /models}]
+      volumes:
+        - {name: models, persistentVolumeClaim: {claimName: model-cache}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm-candidate
+  namespace: llm-serving
+spec:
+  selector: {app: vllm-candidate}
+  ports: [{name: http, port: 8000, targetPort: 8000}]

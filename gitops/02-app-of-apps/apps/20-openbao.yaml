@@ -1,0 +1,34 @@
+# Dev-mode OpenBao (in-memory). The openbao-token Secret + ClusterSecretStore
+# are created by security/02-secrets-openbao-eso/install.sh — secrets are not
+# committed to git. In production: Raft storage + Kubernetes auth method.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: openbao
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-4"
+spec:
+  project: ai-lab
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: security
+  sources:
+    - repoURL: https://openbao.github.io/openbao-helm
+      chart: openbao
+      targetRevision: "*"
+      helm:
+        valueFiles:
+          - $values/security/02-secrets-openbao-eso/openbao-values.yaml
+    - repoURL: https://github.com/deepak-muley/scalable-oss-ai-infra.git
+      targetRevision: main
+      ref: values          # lets other sources use $values/<path>
+  syncPolicy:
+    automated:
+      selfHeal: true      # revert manual drift
+      prune: false        # lab safety: deleting a file does not delete CRDs/PVCs; flip once confident
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff: {duration: 10s, factor: 2, maxDuration: 5m}

@@ -1,0 +1,25 @@
+# Copy s3://models/<name>/<version> -> model-cache PVC so vLLM loads from the
+# shared, page-cache-warm volume instead of pulling from S3 on every restart.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: sync-model
+  namespace: llm-serving
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 600
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: sync
+          image: amazon/aws-cli:2.17.0          # honours AWS_ENDPOINT_URL (MinIO)
+          envFrom: [{secretRef: {name: minio-creds}}]
+          command: ["aws", "s3", "sync", "--delete",
+                    "s3://models/MODEL_NAME_VALUE/MODEL_VERSION_VALUE/",
+                    "/models/registry/MODEL_NAME_VALUE/MODEL_VERSION_VALUE/"]
+          resources:
+            requests: {cpu: 500m, memory: 512Mi}
+          volumeMounts: [{name: models, mountPath: /models}]
+      volumes:
+        - {name: models, persistentVolumeClaim: {claimName: model-cache}}

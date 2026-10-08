@@ -1,0 +1,39 @@
+# Default deny for the tenant namespace, then allow only what a tenant needs.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: tenant-isolation
+  namespace: tenant-${TENANT}
+spec:
+  endpointSelector: {}
+  ingress:
+    - fromEndpoints:
+        - matchLabels:                                   # intra-tenant (NCCL, Ray)
+            k8s:io.kubernetes.pod.namespace: "tenant-${TENANT}"
+        - matchLabels: {k8s:io.kubernetes.pod.namespace: monitoring}         # Prometheus scrapes
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: "tenant-${TENANT}"
+    # DNS
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - {port: "53", protocol: UDP}
+            - {port: "53", protocol: TCP}
+          rules:
+            dns:
+              - matchPattern: "*"
+    # The shared AI gateway (Envoy proxy pods live in envoy-gateway-system)
+    - toEndpoints:
+        - matchLabels: {k8s:io.kubernetes.pod.namespace: envoy-gateway-system}
+    # Shared MLOps services (MinIO, MLflow)
+    - toEndpoints:
+        - matchLabels: {k8s:io.kubernetes.pod.namespace: mlops}
+    # Kubernetes API (Ray/Trainer clients, operators acting for the tenant)
+    - toEntities: [kube-apiserver]
+    # Uncomment to allow internet egress (pip installs, HF downloads):
+    # - toEntities: [world]

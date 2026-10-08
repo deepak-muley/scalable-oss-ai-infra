@@ -1,0 +1,97 @@
+# veRL GRPO on GSM8K. Single-node default: the HEAD pod owns the GPUs (no
+# workers), so the driver, the dataloader and the checkpoints are all in one place.
+# Multi-node: set trainer.nnodes=N, add a GPU workerGroup with N-1 replicas, and
+# keep the RWX /ckpt mount on every pod.
+#
+# FRAGILE: Hydra keys and image tags are veRL-version specific (see README).
+apiVersion: ray.io/v1
+kind: RayJob
+metadata:
+  name: rl-grpo-gsm8k
+  namespace: training
+  labels:
+    kueue.x-k8s.io/queue-name: research
+spec:
+  shutdownAfterJobFinishes: true
+  ttlSecondsAfterFinished: 3600
+  # Folded scalar: every line below must have the SAME indent (more-indented
+  # lines keep their newline). Outer single quotes go to the submit shell; the
+  # inner bash expands $LAST / $(...) and the \" escapes.
+  entrypoint: >-
+    bash -c '
+    set -ex;
+    git clone --depth 1 -b VERL_REF https://github.com/volcengine/verl /tmp/verl;
+    python3 /tmp/verl/examples/data_preprocess/gsm8k.py --local_dir /ckpt/data/gsm8k ||
+    python3 /tmp/verl/examples/data_preprocess/gsm8k.py --local_save_dir /ckpt/data/gsm8k;
+    python3 -m verl.trainer.main_ppo
+    algorithm.adv_estimator=grpo
+    data.train_files=/ckpt/data/gsm8k/train.parquet
+    data.val_files=/ckpt/data/gsm8k/test.parquet
+    data.train_batch_size=128
+    data.max_prompt_length=512
+    data.max_response_length=512
+    data.filter_overlong_prompts=True
+    data.truncation=error
+    actor_rollout_ref.model.path=MODEL_VALUE
+    actor_rollout_ref.model.use_remove_padding=True
+    actor_rollout_ref.model.enable_gradient_checkpointing=True
+    actor_rollout_ref.actor.optim.lr=1e-6
+    actor_rollout_ref.actor.ppo_mini_batch_size=64
+    actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=8
+    actor_rollout_ref.actor.use_kl_loss=True
+    actor_rollout_ref.actor.kl_loss_coef=0.001
+    actor_rollout_ref.actor.kl_loss_type=low_var_kl
+    actor_rollout_ref.actor.entropy_coeff=0
+    actor_rollout_ref.actor.fsdp_config.param_offload=False
+    actor_rollout_ref.actor.fsdp_config.optimizer_offload=False
+    actor_rollout_ref.rollout.name=vllm
+    actor_rollout_ref.rollout.n=4
+    actor_rollout_ref.rollout.tensor_model_parallel_size=1
+    actor_rollout_ref.rollout.gpu_memory_utilization=0.5
+    actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=16
+    actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=16
+    actor_rollout_ref.ref.fsdp_config.param_offload=True
+    algorithm.use_kl_in_reward=False
+    trainer.critic_warmup=0
+    "trainer.logger=[console,mlflow]"
+    trainer.project_name=rl-grpo
+    trainer.experiment_name=OUT_NAME_VALUE
+    trainer.n_gpus_per_node=GPUS_VALUE
+    trainer.nnodes=1
+    trainer.default_local_dir=/ckpt/runs/OUT_NAME_VALUE
+    trainer.save_freq=50
+    trainer.test_freq=10
+    trainer.total_epochs=EPOCHS_VALUE;
+    LAST=$(ls -d /ckpt/runs/OUT_NAME_VALUE/global_step_* | sort -V | tail -1);
+    python3 -m verl.model_merger merge --backend fsdp --local_dir $LAST/actor --target_dir /ckpt/hf/OUT_NAME_VALUE ||
+    python3 /tmp/verl/scripts/model_merger.py merge --backend fsdp --local_dir $LAST/actor --target_dir /ckpt/hf/OUT_NAME_VALUE;
+    pip install -q boto3;
+    python3 -c "import boto3,os,pathlib; s=boto3.client(\"s3\",endpoint_url=os.environ[\"AWS_ENDPOINT_URL\"]); d=pathlib.Path(\"/ckpt/hf/OUT_NAME_VALUE\"); [s.upload_file(str(f),\"models\",f\"OUT_NAME_VALUE/v1/{f.relative_to(d)}\") for f in d.rglob(\"*\") if f.is_file()]; print(\"uploaded s3://models/OUT_NAME_VALUE/v1\")"
+    '
+  rayClusterSpec:
+    headGroupSpec:
+      rayStartParams:
+        dashboard-host: "0.0.0.0"
+        num-gpus: "GPUS_VALUE"
+      template:
+        spec:
+          runtimeClassName: nvidia
+          containers:
+            - name: ray-head
+              image: VERL_IMAGE_VALUE
+              envFrom: [{secretRef: {name: minio-creds}}]
+              env:
+                - {name: MLFLOW_TRACKING_URI, value: http://mlflow.mlops.svc.cluster.local}
+                - {name: HF_HOME, value: /ckpt/hf-cache}
+                - name: HF_TOKEN
+                  valueFrom: {secretKeyRef: {name: hf-token, key: token, optional: true}}
+              resources:
+                requests: {cpu: "8", memory: 64Gi}
+                limits: {nvidia.com/gpu: GPUS_VALUE, memory: 96Gi}
+              volumeMounts:
+                - {name: ckpt, mountPath: /ckpt}
+                - {name: shm, mountPath: /dev/shm}
+          volumes:
+            - {name: ckpt, persistentVolumeClaim: {claimName: rl-checkpoints}}
+            - {name: shm, emptyDir: {medium: Memory, sizeLimit: 16Gi}}
+    workerGroupSpecs: []

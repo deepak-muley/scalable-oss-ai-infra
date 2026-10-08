@@ -1,0 +1,29 @@
+# EDIT nominalQuota values in platform/09-kueue/queues.yaml to match your GPUs, then commit.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kueue-queues
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-4"
+spec:
+  project: ai-lab
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kueue-system
+  sources:
+    - repoURL: https://github.com/deepak-muley/scalable-oss-ai-infra.git
+      targetRevision: main
+      path: platform/09-kueue
+      directory:
+        include: 'queues.yaml'
+  syncPolicy:
+    automated:
+      selfHeal: true      # revert manual drift
+      prune: false        # lab safety: deleting a file does not delete CRDs/PVCs; flip once confident
+    syncOptions:
+      - CreateNamespace=true
+      - SkipDryRunOnMissingResource=true
+    retry:
+      limit: 5
+      backoff: {duration: 10s, factor: 2, maxDuration: 5m}

@@ -1,0 +1,48 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: ai-lab-cost
+  namespace: monitoring
+spec:
+  groups:
+    - name: ai-lab.cost
+      interval: 1m
+      rules:
+        # pod -> model_name mapping, taken from vLLM's own metrics (value 1)
+        - record: ai_lab:vllm_pod_model:info
+          expr: group by (namespace, pod, model_name) (vllm:num_requests_running)
+
+        # GPU $/h per pod = GPUs allocated (OpenCost) x node GPU hourly price (OpenCost)
+        - record: ai_lab:gpu_cost_per_hour:by_pod
+          expr: |
+            sum by (namespace, pod, node) (container_gpu_allocation)
+              * on (node) group_left()
+            max by (node) (node_gpu_hourly_cost)
+
+        - record: ai_lab:gpu_cost_per_hour:by_namespace
+          expr: sum by (namespace) (ai_lab:gpu_cost_per_hour:by_pod)
+
+        - record: ai_lab:gpu_cost_per_hour:by_model
+          expr: |
+            sum by (model_name) (
+              ai_lab:gpu_cost_per_hour:by_pod
+                * on (namespace, pod) group_left(model_name)
+              ai_lab:vllm_pod_model:info
+            )
+
+        - record: ai_lab:output_tokens_per_hour:by_model
+          expr: sum by (model_name) (rate(vllm:generation_tokens_total[1h])) * 3600
+        - record: ai_lab:total_tokens_per_hour:by_model
+          expr: |
+            sum by (model_name) (rate(vllm:generation_tokens_total[1h])) * 3600
+            + sum by (model_name) (rate(vllm:prompt_tokens_total[1h])) * 3600
+
+        - record: ai_lab:cost_per_1m_output_tokens:by_model
+          expr: ai_lab:gpu_cost_per_hour:by_model / clamp_min(ai_lab:output_tokens_per_hour:by_model, 1) * 1e6
+        - record: ai_lab:cost_per_1m_total_tokens:by_model
+          expr: ai_lab:gpu_cost_per_hour:by_model / clamp_min(ai_lab:total_tokens_per_hour:by_model, 1) * 1e6
+
+        # AI Gateway token usage (VERSION-DEPENDENT metric/label names, see README)
+        - record: ai_lab:gateway_tokens_per_hour:by_model_type
+          expr: |
+            sum by (gen_ai_request_model, gen_ai_token_type) (rate(gen_ai_client_token_usage_sum[1h])) * 3600

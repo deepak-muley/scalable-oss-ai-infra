@@ -1,0 +1,61 @@
+# Offline batch inference with `vllm run-batch` (OpenAI Batch API file format).
+# Kueue (LocalQueue "batch") admits it only when GPU quota is free, and it is
+# low priority, so it soaks up idle GPUs and yields to more important work.
+#
+#   s3://datasets/batch/input.jsonl  ->  vLLM (in-process, no HTTP server)  ->  s3://datasets/batch/output.jsonl
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: batch-ticket-labels
+  namespace: evaluation
+  labels:
+    kueue.x-k8s.io/queue-name: batch
+    kueue.x-k8s.io/priority-class: low
+spec:
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 3600
+  template:
+    spec:
+      restartPolicy: Never
+      runtimeClassName: nvidia
+      initContainers:
+        - name: fetch-input
+          image: amazon/aws-cli:2.17.0
+          envFrom: [{secretRef: {name: minio-creds}}]
+          command: ["aws", "s3", "cp", "s3://datasets/batch/input.jsonl", "/work/input.jsonl"]
+          volumeMounts: [{name: work, mountPath: /work}]
+      containers:
+        - name: vllm
+          image: vllm/vllm-openai:v0.10.2
+          command: ["sh", "-c"]
+          args:
+            - >
+              vllm run-batch -i /work/input.jsonl -o /work/output.jsonl
+              --model Qwen/Qwen2.5-1.5B-Instruct
+              --max-model-len 4096 --enable-prefix-caching
+              && touch /work/done || touch /work/failed
+          env:
+            - {name: HF_HOME, value: /work/hf}     # evaluation ns has no shared model cache; downloads per run
+          resources:
+            requests: {cpu: "4", memory: 16Gi}
+            limits: {nvidia.com/gpu: 1, memory: 24Gi}
+          volumeMounts:
+            - {name: work, mountPath: /work}
+            - {name: shm, mountPath: /dev/shm}
+        - name: upload-output
+          # waits for the vLLM container, then uploads results (plain containers run concurrently)
+          image: amazon/aws-cli:2.17.0
+          envFrom: [{secretRef: {name: minio-creds}}]
+          command: ["sh", "-c"]
+          args:
+            - |
+              until [ -f /work/done ] || [ -f /work/failed ]; do sleep 5; done
+              [ -f /work/failed ] && { echo "batch failed"; exit 1; }
+              aws s3 cp /work/output.jsonl s3://datasets/batch/output.jsonl
+              echo "results: s3://datasets/batch/output.jsonl ($(wc -l < /work/output.jsonl) lines)"
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+          volumeMounts: [{name: work, mountPath: /work}]
+      volumes:
+        - {name: work, emptyDir: {sizeLimit: 50Gi}}
+        - {name: shm, emptyDir: {medium: Memory, sizeLimit: 8Gi}}

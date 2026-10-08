@@ -1,0 +1,13 @@
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: kill-lmcache-server
+  namespace: chaos-mesh
+spec:
+  action: pod-kill
+  mode: all
+  gracePeriod: 0
+  selector:
+    namespaces: [llm-serving]
+    labelSelectors:
+      app: lmcache-server

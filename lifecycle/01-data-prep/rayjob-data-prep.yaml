@@ -1,0 +1,54 @@
+# CPU-only Ray cluster: data prep is I/O + tokenizer bound, so don't burn GPUs.
+# The script is mounted from ConfigMap "data-prep-script" (created by run.sh
+# from prep.py so the Python stays a real, lintable file).
+apiVersion: ray.io/v1
+kind: RayJob
+metadata:
+  name: data-prep-MODE_VALUE
+  namespace: training
+  labels:
+    kueue.x-k8s.io/queue-name: research
+spec:
+  entrypoint: python /home/ray/jobs/prep.py
+  # datasets/boto3 aren't guaranteed in the image; installed per job.
+  runtimeEnvYAML: |
+    pip: ["datasets>=2.19", "boto3"]
+    env_vars:
+      MODE: "MODE_VALUE"
+      N_DOCS: "N_DOCS_VALUE"
+      HF_HUB_ENABLE_HF_TRANSFER: "0"
+  shutdownAfterJobFinishes: true
+  ttlSecondsAfterFinished: 1800
+  rayClusterSpec:
+    headGroupSpec:
+      rayStartParams: {dashboard-host: "0.0.0.0", num-cpus: "2"}
+      template:
+        spec:
+          containers:
+            - name: ray-head
+              image: rayproject/ray-llm:2.46.0-py311-cu124   # has transformers; runs fine without a GPU
+              envFrom: [{secretRef: {name: minio-creds}}]
+              env:
+                - name: HF_TOKEN
+                  valueFrom: {secretKeyRef: {name: hf-token, key: token, optional: true}}
+              resources:
+                requests: {cpu: "2", memory: 8Gi}
+                limits: {memory: 16Gi}        # driver holds the streamed rows in memory
+              volumeMounts: [{name: script, mountPath: /home/ray/jobs}]
+          volumes:
+            - {name: script, configMap: {name: data-prep-script}}
+    workerGroupSpecs:
+      - groupName: cpu
+        replicas: 2
+        minReplicas: 2
+        maxReplicas: 2
+        rayStartParams: {}
+        template:
+          spec:
+            containers:
+              - name: ray-worker
+                image: rayproject/ray-llm:2.46.0-py311-cu124
+                envFrom: [{secretRef: {name: minio-creds}}]
+                resources:
+                  requests: {cpu: "4", memory: 8Gi}
+                  limits: {memory: 12Gi}

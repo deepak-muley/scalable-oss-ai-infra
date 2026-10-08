@@ -1,0 +1,43 @@
+# One central collector (Deployment). At scale you'd run an agent DaemonSet
+# + a gateway tier with tail sampling (keep slow/error traces, drop the rest).
+mode: deployment
+fullnameOverride: otel-collector        # -> Service otel-collector:4317/4318
+image:
+  repository: otel/opentelemetry-collector-contrib   # contrib = k8sattributes, tail_sampling, ...
+replicaCount: 1
+presets:
+  kubernetesAttributes:
+    enabled: true                       # add k8s.pod.name/namespace to spans (for trace->logs)
+config:
+  receivers:
+    otlp:
+      protocols:
+        grpc: {endpoint: "0.0.0.0:4317"}
+        http: {endpoint: "0.0.0.0:4318"}
+  processors:
+    batch: {}
+    memory_limiter:
+      check_interval: 1s
+      limit_percentage: 80
+      spike_limit_percentage: 25
+    # Example tail sampling: keep all errors and anything slower than 2s.
+    # Enable by adding it to the traces pipeline below.
+    tail_sampling:
+      decision_wait: 10s
+      policies:
+        - {name: errors, type: status_code, status_code: {status_codes: [ERROR]}}
+        - {name: slow, type: latency, latency: {threshold_ms: 2000}}
+        - {name: sample-10pct, type: probabilistic, probabilistic: {sampling_percentage: 10}}
+  exporters:
+    otlp/tempo:
+      endpoint: tempo.observability.svc.cluster.local:4317
+      tls: {insecure: true}
+  service:
+    pipelines:
+      traces:
+        receivers: [otlp]
+        processors: [memory_limiter, batch]     # add tail_sampling here at volume
+        exporters: [otlp/tempo]
+resources:
+  requests: {cpu: 100m, memory: 256Mi}
+  limits: {memory: 1Gi}

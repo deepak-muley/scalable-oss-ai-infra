@@ -1,0 +1,38 @@
+# Root credentials must not live in git. Create them first:
+#   kubectl -n mlops create secret generic minio-root \
+#     --from-literal=rootUser=labadmin --from-literal=rootPassword=$(openssl rand -hex 16)
+# and distribute minio-creds to workload namespaces (training/01-object-storage/install.sh
+# does this, or use ESO).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: minio
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  project: ai-lab
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: mlops
+  sources:
+    - repoURL: https://charts.min.io/
+      chart: minio
+      targetRevision: "*"
+      helm:
+        valueFiles:
+          - $values/training/01-object-storage/values.yaml
+        valuesObject:
+          existingSecret: minio-root   # create out-of-band: rootUser/rootPassword keys
+    - repoURL: https://github.com/deepak-muley/scalable-oss-ai-infra.git
+      targetRevision: main
+      ref: values          # lets other sources use $values/<path>
+  syncPolicy:
+    automated:
+      selfHeal: true      # revert manual drift
+      prune: false        # lab safety: deleting a file does not delete CRDs/PVCs; flip once confident
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff: {duration: 10s, factor: 2, maxDuration: 5m}

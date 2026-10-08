@@ -1,0 +1,40 @@
+# VERSION-DEPENDENT: Envoy Gateway >= 1.2 uses provider.backendRefs; older
+# releases used provider.host/port. Check: kubectl explain envoyproxy.spec.telemetry.tracing
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: ai-gateway-telemetry
+  namespace: ai-gateway
+spec:
+  telemetry:
+    tracing:
+      samplingRate: 100           # lab: trace everything; production: 1-10 + tail sampling
+      provider:
+        type: OpenTelemetry
+        backendRefs:
+          - name: otel-collector
+            namespace: observability
+            port: 4317
+      customTags:
+        ai.model:
+          type: RequestHeader
+          requestHeader: {name: x-ai-eg-model, defaultValue: unknown}
+        ai.user:
+          type: RequestHeader
+          requestHeader: {name: x-user-id, defaultValue: anonymous}
+---
+# Cross-namespace reference (ai-gateway -> observability) must be granted.
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: allow-envoyproxy-to-otel
+  namespace: observability
+spec:
+  from:
+    - group: gateway.envoyproxy.io
+      kind: EnvoyProxy
+      namespace: ai-gateway
+  to:
+    - group: ""
+      kind: Service
+      name: otel-collector

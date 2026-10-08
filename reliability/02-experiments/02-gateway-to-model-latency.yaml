@@ -1,0 +1,22 @@
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: gateway-to-model-latency
+  namespace: chaos-mesh
+spec:
+  action: delay
+  mode: all
+  selector:                      # source: Envoy proxy pods of the AI gateway
+    namespaces: [envoy-gateway-system]
+    labelSelectors:
+      app.kubernetes.io/component: proxy
+  direction: to
+  target:                        # destination: model servers
+    mode: all
+    selector:
+      namespaces: [llm-serving]
+  delay:
+    latency: 200ms
+    jitter: 50ms
+    correlation: "25"
+  duration: 5m

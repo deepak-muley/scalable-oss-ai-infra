@@ -1,0 +1,92 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: ai-lab-serving-slo
+  namespace: monitoring
+spec:
+  groups:
+    # ---------------------------------------------------------------- recording
+    # Fraction of requests whose TTFT exceeded 2.5 s, per model, per window.
+    - name: ai-lab.ttft-slo.recording
+      interval: 30s
+      rules:
+        - record: ai_lab:ttft_slow_ratio:rate5m
+          expr: |
+            1 - (
+              sum by (model_name) (rate(vllm:time_to_first_token_seconds_bucket{le="2.5"}[5m]))
+              /
+              clamp_min(sum by (model_name) (rate(vllm:time_to_first_token_seconds_count[5m])), 1e-9)
+            )
+        - record: ai_lab:ttft_slow_ratio:rate30m
+          expr: |
+            1 - (
+              sum by (model_name) (rate(vllm:time_to_first_token_seconds_bucket{le="2.5"}[30m]))
+              /
+              clamp_min(sum by (model_name) (rate(vllm:time_to_first_token_seconds_count[30m])), 1e-9)
+            )
+        - record: ai_lab:ttft_slow_ratio:rate1h
+          expr: |
+            1 - (
+              sum by (model_name) (rate(vllm:time_to_first_token_seconds_bucket{le="2.5"}[1h]))
+              /
+              clamp_min(sum by (model_name) (rate(vllm:time_to_first_token_seconds_count[1h])), 1e-9)
+            )
+        - record: ai_lab:ttft_slow_ratio:rate6h
+          expr: |
+            1 - (
+              sum by (model_name) (rate(vllm:time_to_first_token_seconds_bucket{le="2.5"}[6h]))
+              /
+              clamp_min(sum by (model_name) (rate(vllm:time_to_first_token_seconds_count[6h])), 1e-9)
+            )
+        - record: ai_lab:ttft_slo_error_budget
+          expr: vector(0.05)    # SLO 95% within 2.5 s
+    - name: ai-lab.ttft-slo.alerts
+      rules:
+        - alert: TTFTSLOFastBurn
+          expr: |
+            ai_lab:ttft_slow_ratio:rate1h > (14.4 * 0.05)
+            and
+            ai_lab:ttft_slow_ratio:rate5m > (14.4 * 0.05)
+          labels: {severity: critical}
+          annotations:
+            summary: "{{ $labels.model_name }} burning TTFT error budget 14x too fast"
+            description: "Users are waiting. Check queue depth / replicas / KV cache on the AI Lab — LLM Serving dashboard."
+            runbook_url: https://github.com/deepak-muley/scalable-oss-ai-infra/blob/main/docs/13-troubleshooting.md#inference
+        - alert: TTFTSLOSlowBurn
+          expr: |
+            ai_lab:ttft_slow_ratio:rate6h > (6 * 0.05)
+            and
+            ai_lab:ttft_slow_ratio:rate30m > (6 * 0.05)
+          labels: {severity: warning}
+          annotations:
+            summary: "{{ $labels.model_name }} slowly burning TTFT error budget"
+            description: "Capacity is short for this model's traffic pattern; raise minReplicas or improve cache hit rate."
+            runbook_url: https://github.com/deepak-muley/scalable-oss-ai-infra/blob/main/docs/13-troubleshooting.md#inference
+    # ---------------------------------------------------------------- engine
+    - name: ai-lab.vllm
+      rules:
+        - alert: VLLMQueueBacklog
+          expr: sum by (model_name) (vllm:num_requests_waiting) > 20
+          for: 5m
+          labels: {severity: warning}
+          annotations:
+            summary: "{{ $value }} requests queued for {{ $labels.model_name }}"
+            description: "Autoscaling not keeping up (no free GPUs? slow cold start? KEDA misconfigured?)."
+            runbook_url: https://github.com/deepak-muley/scalable-oss-ai-infra/blob/main/docs/13-troubleshooting.md#inference
+        - alert: VLLMKVCacheSaturated
+          # renamed gpu_cache_usage_perc -> kv_cache_usage_perc in newer vLLM
+          expr: max by (pod) (vllm:gpu_cache_usage_perc or vllm:kv_cache_usage_perc) > 0.95
+          for: 10m
+          labels: {severity: warning}
+          annotations:
+            summary: "KV cache >95% on {{ $labels.pod }}"
+            description: "Requests get preempted/recomputed. Lower max-num-seqs, FP8 KV cache, more replicas, or LMCache offload."
+            runbook_url: https://github.com/deepak-muley/scalable-oss-ai-infra/blob/main/docs/13-troubleshooting.md#inference
+        - alert: VLLMEngineDown
+          expr: up{namespace="llm-serving"} == 0
+          for: 3m
+          labels: {severity: critical}
+          annotations:
+            summary: "vLLM pod {{ $labels.pod }} not scrapeable"
+            description: "Pod crashed, OOM, or stuck loading weights. kubectl -n llm-serving describe pod {{ $labels.pod }}"
+            runbook_url: https://github.com/deepak-muley/scalable-oss-ai-infra/blob/main/docs/13-troubleshooting.md#inference

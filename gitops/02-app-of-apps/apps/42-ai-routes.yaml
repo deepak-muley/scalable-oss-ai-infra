@@ -1,0 +1,31 @@
+# Model promotion = a PR that edits gateway/03-ai-routes/ai-gateway-route.yaml.
+# If a pipeline patches the route in-cluster instead, selfHeal reverts it —
+# see docs/15-gitops-and-pipelines.md for the two promotion patterns.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ai-routes
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: ai-lab
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ai-gateway
+  sources:
+    - repoURL: https://github.com/deepak-muley/scalable-oss-ai-infra.git
+      targetRevision: main
+      path: gateway/03-ai-routes
+      directory:
+        include: '{backends.yaml,ai-gateway-route.yaml}'
+  syncPolicy:
+    automated:
+      selfHeal: true      # revert manual drift
+      prune: false        # lab safety: deleting a file does not delete CRDs/PVCs; flip once confident
+    syncOptions:
+      - CreateNamespace=true
+      - SkipDryRunOnMissingResource=true
+    retry:
+      limit: 5
+      backoff: {duration: 10s, factor: 2, maxDuration: 5m}

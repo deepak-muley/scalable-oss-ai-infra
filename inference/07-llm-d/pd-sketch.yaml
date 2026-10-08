@@ -1,0 +1,135 @@
+# =============================================================================
+# LEARNING SKETCH — prefill/decode disaggregation with vLLM NixlConnector.
+# Version dependent: NIXL/UCX env vars, sidecar image/flags and the EPP P/D
+# configuration change between vLLM and llm-d releases. Use the llm-d
+# pd-disaggregation guide for a working deployment; use this file to see
+# every moving part in one place.
+#
+# Topology: 1 prefill pod + 2 decode pods, same model, all kv_role=kv_both.
+# The scheduler (EPP with a P/D profile handler — configured by the llm-d
+# guide, not here) chooses a decode pod and tells its sidecar which prefill
+# pod to use via a request header.
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pd-prefill
+  namespace: llm-serving
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: pd-qwen, llm-d.ai/role: prefill}}
+  template:
+    metadata:
+      labels:
+        app: pd-qwen
+        llm-d.ai/role: prefill            # EPP filters endpoints by this role label
+        ai.lab/inference-engine: vllm
+    spec:
+      runtimeClassName: nvidia
+      containers:
+        - name: vllm
+          image: vllm/vllm-openai:v0.10.2
+          command: ["vllm", "serve"]
+          args:
+            - Qwen/Qwen2.5-7B-Instruct
+            - --port=8000
+            - --max-model-len=32768
+            - --gpu-memory-utilization=0.90
+            - --enable-prefix-caching          # prefill pods benefit most from prefix reuse
+            - --kv-transfer-config
+            - '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
+          env:
+            - {name: HF_HOME, value: /models/hf}
+            - name: HF_TOKEN
+              valueFrom: {secretKeyRef: {name: hf-token, key: token, optional: true}}
+            # NIXL side channel: decode pods contact this address to set up transfers
+            - name: VLLM_NIXL_SIDE_CHANNEL_HOST
+              valueFrom: {fieldRef: {fieldPath: status.podIP}}
+            - {name: VLLM_NIXL_SIDE_CHANNEL_PORT, value: "5557"}
+            # UCX transport selection: with RDMA NICs add rc/ib; TCP works but is slow
+            - {name: UCX_TLS, value: "cuda_ipc,cuda_copy,tcp"}
+          ports:
+            - {name: http, containerPort: 8000}
+            - {name: nixl, containerPort: 5557}
+          readinessProbe: {httpGet: {path: /health, port: 8000}, periodSeconds: 5}
+          startupProbe: {httpGet: {path: /health, port: 8000}, periodSeconds: 10, failureThreshold: 90}
+          resources:
+            requests: {cpu: "8", memory: 48Gi}
+            limits: {nvidia.com/gpu: 1}
+          volumeMounts:
+            - {name: models, mountPath: /models}
+            - {name: shm, mountPath: /dev/shm}
+      volumes:
+        - {name: models, persistentVolumeClaim: {claimName: model-cache}}
+        - {name: shm, emptyDir: {medium: Memory, sizeLimit: 8Gi}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pd-decode
+  namespace: llm-serving
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: pd-qwen, llm-d.ai/role: decode}}
+  template:
+    metadata:
+      labels:
+        app: pd-qwen
+        llm-d.ai/role: decode
+        ai.lab/inference-engine: vllm
+    spec:
+      runtimeClassName: nvidia
+      initContainers:
+        # Routing sidecar as a native sidecar (restartPolicy: Always, k8s >= 1.29).
+        # It owns the pod's public port 8000:
+        #   - no prefiller header -> proxy straight to local vLLM (aggregated mode)
+        #   - prefiller header    -> 1) POST prompt to prefiller with max_tokens=1 and
+        #                              kv_transfer_params {do_remote_decode: true}
+        #                            2) POST to local vLLM with the returned
+        #                              kv_transfer_params so it pulls KV over NIXL
+        - name: routing-sidecar
+          image: ghcr.io/llm-d/llm-d-routing-sidecar:v0.2.0   # verify tag/flags for your llm-d release
+          restartPolicy: Always
+          args:
+            - --port=8000
+            - --vllm-port=8200
+            - --connector=nixlv2
+          ports: [{name: http, containerPort: 8000}]
+      containers:
+        - name: vllm
+          image: vllm/vllm-openai:v0.10.2
+          command: ["vllm", "serve"]
+          args:
+            - Qwen/Qwen2.5-7B-Instruct
+            - --port=8200                      # behind the sidecar
+            - --max-model-len=32768
+            - --gpu-memory-utilization=0.90
+            - --kv-transfer-config
+            - '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
+          env:
+            - {name: HF_HOME, value: /models/hf}
+            - name: HF_TOKEN
+              valueFrom: {secretKeyRef: {name: hf-token, key: token, optional: true}}
+            - name: VLLM_NIXL_SIDE_CHANNEL_HOST
+              valueFrom: {fieldRef: {fieldPath: status.podIP}}
+            - {name: VLLM_NIXL_SIDE_CHANNEL_PORT, value: "5557"}
+            - {name: UCX_TLS, value: "cuda_ipc,cuda_copy,tcp"}
+          ports:
+            - {name: vllm, containerPort: 8200}
+            - {name: nixl, containerPort: 5557}
+          readinessProbe: {httpGet: {path: /health, port: 8200}, periodSeconds: 5}
+          startupProbe: {httpGet: {path: /health, port: 8200}, periodSeconds: 10, failureThreshold: 90}
+          resources:
+            requests: {cpu: "8", memory: 48Gi}
+            limits: {nvidia.com/gpu: 1}
+          volumeMounts:
+            - {name: models, mountPath: /models}
+            - {name: shm, mountPath: /dev/shm}
+      volumes:
+        - {name: models, persistentVolumeClaim: {claimName: model-cache}}
+        - {name: shm, emptyDir: {medium: Memory, sizeLimit: 8Gi}}
+# Next (from the llm-d guide, version specific):
+#  * an InferencePool selecting app=pd-qwen (port 8000)
+#  * EPP configured with the P/D profile handler + prefix/load scorers, which
+#    filters decode vs prefill endpoints by the llm-d.ai/role label
+#  * an HTTPRoute / AIGatewayRoute pointing at the InferencePool

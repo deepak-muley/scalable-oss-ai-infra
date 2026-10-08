@@ -1,0 +1,27 @@
+# OCI chart: repo registered with enableOCI in 01-argocd/values.yaml.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: lws
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"
+spec:
+  project: ai-lab
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: lws-system
+  sources:
+    - repoURL: registry.k8s.io/lws/charts
+      chart: lws
+      targetRevision: "0.7.0"
+  syncPolicy:
+    automated:
+      selfHeal: true      # revert manual drift
+      prune: false        # lab safety: deleting a file does not delete CRDs/PVCs; flip once confident
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff: {duration: 10s, factor: 2, maxDuration: 5m}

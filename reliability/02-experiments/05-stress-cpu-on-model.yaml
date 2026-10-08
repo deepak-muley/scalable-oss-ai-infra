@@ -1,0 +1,19 @@
+apiVersion: chaos-mesh.org/v1alpha1
+kind: StressChaos
+metadata:
+  name: stress-cpu-on-model
+  namespace: chaos-mesh
+spec:
+  mode: one
+  selector:
+    namespaces: [llm-serving]
+    labelSelectors:
+      app: vllm-qwen-7b
+  stressors:
+    cpu:
+      workers: 4
+      load: 90
+    memory:
+      workers: 1
+      size: 4GB
+  duration: 5m

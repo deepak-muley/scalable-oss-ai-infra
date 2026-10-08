@@ -1,0 +1,57 @@
+# Pretraining TrainJob. run.sh substitutes NUM_NODES / GPUS_PER_NODE / env values.
+#
+# The script comes from ConfigMap "pretrain-script" mounted via podSpecOverrides.
+# FRAGILE: podSpecOverrides and the runtime's job/container name ("node") are
+# Kubeflow Trainer v2 alpha API details — check
+#   kubectl get clustertrainingruntime torch-distributed -o yaml
+# If the names differ, fix targetJobs/containers below. Fallback: inline the
+# script with a bash heredoc in `command` (see training/05-jobs/*.yaml).
+apiVersion: trainer.kubeflow.org/v1alpha1
+kind: TrainJob
+metadata:
+  name: pretrain-gpt125m
+  namespace: training
+  labels:
+    kueue.x-k8s.io/queue-name: research        # waits for GPU quota instead of failing
+spec:
+  runtimeRef:
+    name: torch-distributed
+  trainer:
+    numNodes: NUM_NODES
+    image: pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime
+    command:
+      - bash
+      - -c
+      - pip install -q boto3 mlflow "transformers>=4.44" && torchrun /scripts/pretrain.py
+    env:
+      - {name: RUN_NAME, value: "RUN_NAME_VALUE"}
+      - {name: MAX_STEPS, value: "MAX_STEPS_VALUE"}
+      - {name: MICRO_BS, value: "16"}           # lower to 8 on 24 GB GPUs
+      - {name: GRAD_ACCUM, value: "4"}
+      - {name: PEAK_TFLOPS, value: "PEAK_TFLOPS_VALUE"}
+      - {name: MLFLOW_TRACKING_URI, value: http://mlflow.mlops.svc.cluster.local}
+      - {name: NCCL_DEBUG, value: WARN}
+      - name: AWS_ACCESS_KEY_ID
+        valueFrom: {secretKeyRef: {name: minio-creds, key: AWS_ACCESS_KEY_ID}}
+      - name: AWS_SECRET_ACCESS_KEY
+        valueFrom: {secretKeyRef: {name: minio-creds, key: AWS_SECRET_ACCESS_KEY}}
+      - name: AWS_ENDPOINT_URL
+        valueFrom: {secretKeyRef: {name: minio-creds, key: AWS_ENDPOINT_URL}}
+      - name: MLFLOW_S3_ENDPOINT_URL
+        valueFrom: {secretKeyRef: {name: minio-creds, key: MLFLOW_S3_ENDPOINT_URL}}
+    resourcesPerNode:
+      limits:
+        nvidia.com/gpu: GPUS_PER_NODE           # torchrun nproc_per_node follows this
+      requests:
+        cpu: "8"
+        memory: 48Gi                            # every rank holds the token stream in RAM (toy)
+  podSpecOverrides:
+    - targetJobs: [{name: node}]
+      volumes:
+        - {name: scripts, configMap: {name: pretrain-script}}
+        - {name: shm, emptyDir: {medium: Memory, sizeLimit: 8Gi}}   # NCCL shared memory
+      containers:
+        - name: node
+          volumeMounts:
+            - {name: scripts, mountPath: /scripts}
+            - {name: shm, mountPath: /dev/shm}

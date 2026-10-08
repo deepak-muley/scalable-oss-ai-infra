@@ -1,0 +1,27 @@
+# Remediation for experiment 1: retry requests that never reached a model
+# (connection refused/reset, 503 no healthy upstream). Retrying mid-stream
+# is NOT possible — tokens were already sent — so streams on a killed pod
+# still fail; clients must retry those.
+#
+# NOTE: Envoy Gateway applies only one BackendTrafficPolicy per target. If
+# you use gateway/03-ai-routes/optional-token-ratelimit.yaml, merge this
+# `retry` block into that policy instead of applying a second one.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: BackendTrafficPolicy
+metadata:
+  name: retry-before-first-byte
+  namespace: ai-gateway
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: ai-gateway
+  retry:
+    numRetries: 2
+    retryOn:
+      triggers: [connect-failure, reset, retriable-status-codes]
+      httpStatusCodes: [503]
+    perRetry:
+      backOff:
+        baseInterval: 100ms
+        maxInterval: 1s

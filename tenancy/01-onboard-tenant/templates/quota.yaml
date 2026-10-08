@@ -1,0 +1,29 @@
+# Hard caps: even if Kueue is bypassed (e.g. a bare Deployment), the namespace
+# can never request more than this.
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: tenant-quota
+  namespace: tenant-${TENANT}
+spec:
+  hard:
+    requests.nvidia.com/gpu: "${GPU_CAP}"     # quota + borrow limit
+    requests.cpu: "${CPU_QUOTA}"
+    requests.memory: "${MEM_QUOTA}"
+    persistentvolumeclaims: "10"
+    requests.storage: 2Ti
+    services.loadbalancer: "0"               # only the shared AI gateway is exposed
+---
+# Defaults so pods without resources don't land BestEffort (they would be
+# the first OOM-killed and make quota accounting meaningless).
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: tenant-defaults
+  namespace: tenant-${TENANT}
+spec:
+  limits:
+    - type: Container
+      defaultRequest: {cpu: 500m, memory: 1Gi}
+      default: {cpu: "2", memory: 4Gi}
+      max: {memory: 1Ti}

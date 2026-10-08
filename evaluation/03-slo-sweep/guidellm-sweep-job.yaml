@@ -1,0 +1,58 @@
+# Sweep request rate against one model/replica to find its SLO capacity.
+# Benchmark ONE replica (point at a pod Service, not the autoscaled router)
+# so the result is per-replica capacity C.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: guidellm-sweep
+  namespace: evaluation
+  labels:
+    kueue.x-k8s.io/queue-name: batch
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: guidellm
+          image: python:3.12-slim
+          envFrom:
+            - secretRef: {name: minio-creds, optional: true}   # enables S3 upload
+          env:
+            - {name: TARGET, value: "http://vllm-qwen-7b.llm-serving.svc.cluster.local:8000"}
+            - {name: MODEL, value: "Qwen/Qwen2.5-7B-Instruct"}
+            - {name: DATA, value: "prompt_tokens=1024,output_tokens=256"}   # match prod shape
+            - {name: MAX_SECONDS, value: "60"}                            # per rate step
+            - {name: TTFT_P95_MS, value: "1000"}
+            - {name: ITL_P95_MS, value: "50"}
+            - {name: PEAK_RPS, value: "40"}
+            - {name: GPUS_PER_REPLICA, value: "1"}
+            - name: HF_TOKEN            # tokenizer download for synthetic prompts
+              valueFrom: {secretKeyRef: {name: hf-token, key: token, optional: true}}
+          command: ["bash", "-c"]
+          args:
+            - |
+              set -e
+              pip install -q guidellm boto3
+              mkdir -p /results
+              # Flags vary by guidellm version: newer releases may use --profile sweep.
+              guidellm benchmark \
+                --target "${TARGET}" \
+                --model "${MODEL}" \
+                --rate-type sweep \
+                --max-seconds "${MAX_SECONDS}" \
+                --data "${DATA}" \
+                --output-path /results/sweep.json
+              python /analyze/analyze_capacity.py --json /results/sweep.json \
+                --ttft-p95-ms "${TTFT_P95_MS}" --itl-p95-ms "${ITL_P95_MS}" \
+                --peak-rps "${PEAK_RPS}" --gpus-per-replica "${GPUS_PER_REPLICA}"
+              if [ -n "${AWS_ENDPOINT_URL:-}" ]; then
+                python -c "import boto3,time; boto3.client('s3').upload_file('/results/sweep.json','datasets',f'benchmarks/guidellm-{int(time.time())}.json'); print('uploaded to s3://datasets/benchmarks/')"
+              fi
+          resources:
+            requests: {cpu: "2", memory: 4Gi}
+          volumeMounts:
+            - {name: analyze, mountPath: /analyze}
+      volumes:
+        - name: analyze
+          configMap: {name: slo-analyze}

@@ -1,0 +1,41 @@
+# NPD watches /dev/kmsg. The custom monitor turns NVIDIA driver XID lines
+# into events (any XID) and a permanent node condition (fatal XIDs).
+settings:
+  log_monitors:
+    - /config/kernel-monitor.json
+    - /custom-config/gpu-xid-monitor.json
+  custom_monitor_definitions:
+    gpu-xid-monitor.json: |
+      {
+        "plugin": "kmsg",
+        "logPath": "/dev/kmsg",
+        "lookback": "10m",
+        "bufferSize": 10,
+        "source": "gpu-xid-monitor",
+        "conditions": [
+          {
+            "type": "GPUHardwareProblem",
+            "reason": "NoFatalXid",
+            "message": "no fatal GPU XID seen"
+          }
+        ],
+        "rules": [
+          {
+            "type": "temporary",
+            "reason": "GPUXid",
+            "pattern": "NVRM: Xid.*"
+          },
+          {
+            "type": "permanent",
+            "condition": "GPUHardwareProblem",
+            "reason": "GPUFatalXid",
+            "pattern": "NVRM: Xid \\(PCI:[^)]*\\): (48|63|64|74|79|92|94|95),.*"
+          }
+        ]
+      }
+# Run on every node including tainted GPU nodes.
+tolerations:
+  - operator: Exists
+metrics:
+  serviceMonitor:
+    enabled: true            # problem counters -> Prometheus

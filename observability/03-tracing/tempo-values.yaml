@@ -1,0 +1,19 @@
+tempo:
+  retention: 72h                 # lab: 3 days of traces
+  receivers:
+    otlp:
+      protocols:
+        grpc: {endpoint: "0.0.0.0:4317"}
+        http: {endpoint: "0.0.0.0:4318"}
+  # Span metrics / service graphs: Tempo can generate RED metrics from spans
+  # and remote-write them to Prometheus. Needs Prometheus
+  # `enableRemoteWriteReceiver: true` — off by default here.
+  metricsGenerator:
+    enabled: false
+    remoteWriteUrl: http://kps-prometheus.monitoring.svc:9090/api/v1/write
+persistence:
+  enabled: true
+  size: 20Gi
+resources:
+  requests: {cpu: 200m, memory: 512Mi}
+  limits: {memory: 2Gi}

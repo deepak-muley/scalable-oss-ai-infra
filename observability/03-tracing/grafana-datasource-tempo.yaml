@@ -1,0 +1,29 @@
+# Picked up by the kube-prometheus-stack Grafana sidecar (label grafana_datasource).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasource-tempo
+  namespace: monitoring
+  labels:
+    grafana_datasource: "1"
+data:
+  tempo.yaml: |-
+    apiVersion: 1
+    datasources:
+      - name: Tempo
+        type: tempo
+        uid: tempo
+        access: proxy
+        url: http://tempo.observability.svc.cluster.local:3200
+        jsonData:
+          nodeGraph: {enabled: true}
+          serviceMap: {datasourceUid: prometheus}
+          # "Logs for this span" -> Loki (observability/04-logs), matched on pod + time
+          tracesToLogsV2:
+            datasourceUid: loki
+            spanStartTimeShift: "-2m"
+            spanEndTimeShift: "2m"
+            filterByTraceID: false
+            tags:
+              - {key: k8s.pod.name, value: pod}
+              - {key: k8s.namespace.name, value: namespace}

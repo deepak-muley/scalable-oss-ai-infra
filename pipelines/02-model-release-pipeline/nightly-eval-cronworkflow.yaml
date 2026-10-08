@@ -1,0 +1,79 @@
+# Nightly regression check of whatever "lab-chat" currently points to.
+# Catches silent regressions from serving changes (new vLLM version,
+# quantization, routing config) that no training run triggered.
+apiVersion: argoproj.io/v1alpha1
+kind: CronWorkflow
+metadata:
+  name: nightly-lab-chat-eval
+  namespace: training
+spec:
+  schedule: "0 2 * * *"
+  timezone: America/Los_Angeles
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 7
+  failedJobsHistoryLimit: 7
+  workflowSpec:
+    serviceAccountName: model-release
+    entrypoint: nightly
+    arguments:
+      parameters:
+        - {name: route-name, value: lab-models}
+        - {name: min-score, value: "0.20"}     # alert below this
+        - {name: task, value: gsm8k}
+        - {name: limit, value: "200"}
+    templates:
+      - name: nightly
+        steps:
+          - - name: resolve
+              template: resolve-alias
+          - - name: eval
+              templateRef: {name: model-release, template: lm-eval}   # reuse, don't copy
+              arguments:
+                parameters:
+                  - {name: base-url, value: "{{steps.resolve.outputs.parameters.url}}"}
+                  - {name: model, value: "{{steps.resolve.outputs.parameters.model}}"}
+                  - {name: task, value: "{{workflow.parameters.task}}"}
+                  - {name: limit, value: "{{workflow.parameters.limit}}"}
+          - - name: check
+              template: check
+              arguments:
+                parameters:
+                  - {name: score, value: "{{steps.eval.outputs.parameters.score}}"}
+
+      # Follow the alias to the real backend: route rule -> AIServiceBackend
+      # -> Envoy Backend -> in-cluster URL. Evaluating the backend directly
+      # avoids needing gateway credentials in this namespace.
+      - name: resolve-alias
+        outputs:
+          parameters:
+            - {name: url, valueFrom: {path: /tmp/url}}
+            - {name: model, valueFrom: {path: /tmp/model}}
+        container:
+          image: alpine/k8s:1.31.4
+          command: [bash, -c]
+          args:
+            - |
+              set -euo pipefail
+              REF=$(kubectl -n ai-gateway get aigatewayroute {{workflow.parameters.route-name}} -o json \
+                | jq -c '[.spec.rules[] | select(any(.matches[]?.headers[]?; .value == "lab-chat"))][0].backendRefs[0]')
+              SB=$(echo "$REF" | jq -r .name)
+              MODEL=$(echo "$REF" | jq -r '.modelNameOverride // "lab-chat"')
+              BE=$(kubectl -n ai-gateway get aiservicebackend "$SB" -o jsonpath='{.spec.backendRef.name}')
+              HOST=$(kubectl -n ai-gateway get backends.gateway.envoyproxy.io "$BE" -o jsonpath='{.spec.endpoints[0].fqdn.hostname}')
+              PORT=$(kubectl -n ai-gateway get backends.gateway.envoyproxy.io "$BE" -o jsonpath='{.spec.endpoints[0].fqdn.port}')
+              echo "lab-chat -> $SB -> $BE -> http://$HOST:$PORT (model $MODEL)"
+              printf 'http://%s:%s' "$HOST" "$PORT" > /tmp/url
+              printf '%s' "$MODEL" > /tmp/model
+
+      - name: check
+        inputs:
+          parameters: [{name: score}]
+        container:
+          image: python:3.12-slim
+          command: [python, -c]
+          args:
+            - |
+              s, m = float("{{inputs.parameters.score}}"), float("{{workflow.parameters.min-score}}")
+              print(f"lab-chat score {s:.4f} (min {m})")
+              raise SystemExit(0 if s >= m else "REGRESSION: lab-chat below threshold")

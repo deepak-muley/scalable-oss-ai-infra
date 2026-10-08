@@ -1,0 +1,57 @@
+# Route SGLang through the lab gateway, plus a 50/50 A/B alias against vLLM.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: Backend
+metadata:
+  name: sglang-qwen-7b
+  namespace: ai-gateway
+spec:
+  endpoints:
+    - fqdn:
+        hostname: sglang-qwen-7b.llm-serving.svc.cluster.local
+        port: 8000
+---
+apiVersion: aigateway.envoyproxy.io/v1alpha1
+kind: AIServiceBackend
+metadata:
+  name: sglang-qwen-7b
+  namespace: ai-gateway
+spec:
+  schema:
+    name: OpenAI
+  backendRef:
+    name: sglang-qwen-7b
+    kind: Backend
+    group: gateway.envoyproxy.io
+---
+apiVersion: aigateway.envoyproxy.io/v1alpha1
+kind: AIGatewayRoute
+metadata:
+  name: sglang-ab
+  namespace: ai-gateway
+spec:
+  parentRefs:
+    - {name: ai-gateway, kind: Gateway, group: gateway.networking.k8s.io}
+  rules:
+    # explicit engine selection
+    - matches:
+        - headers:
+            - {type: Exact, name: x-ai-eg-model, value: sglang/qwen-7b}
+      backendRefs:
+        - name: sglang-qwen-7b
+          modelNameOverride: Qwen/Qwen2.5-7B-Instruct
+      timeouts:
+        request: 600s
+    # A/B: same public model name, two engines. Compare per-backend latency
+    # in Envoy metrics / Grafana. (weight is a standard Gateway API backendRef field)
+    - matches:
+        - headers:
+            - {type: Exact, name: x-ai-eg-model, value: lab-chat-ab}
+      backendRefs:
+        - name: vllm-basic                    # from gateway/03-ai-routes/backends.yaml
+          modelNameOverride: Qwen/Qwen2.5-7B-Instruct
+          weight: 50
+        - name: sglang-qwen-7b
+          modelNameOverride: Qwen/Qwen2.5-7B-Instruct
+          weight: 50
+      timeouts:
+        request: 600s
