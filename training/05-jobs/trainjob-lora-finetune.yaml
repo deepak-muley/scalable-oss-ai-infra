@@ -1,0 +1,89 @@
+# LoRA supervised fine-tuning of a small instruct model on one GPU.
+#  * metrics -> MLflow (training/02)
+#  * adapter -> s3://checkpoints/adapters/lab-assistant (training/01)
+# Served afterwards by inference/05-model-catalog/lora-multi-adapter.yaml.
+apiVersion: trainer.kubeflow.org/v1alpha1
+kind: TrainJob
+metadata:
+  name: lora-lab-assistant
+  namespace: training
+  labels:
+    kueue.x-k8s.io/queue-name: research
+spec:
+  runtimeRef:
+    name: torch-distributed
+  trainer:
+    numNodes: 1
+    image: pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime
+    resourcesPerNode:
+      limits: {nvidia.com/gpu: 1}
+      requests: {cpu: "4", memory: 24Gi}
+    env:
+      - {name: BASE_MODEL, value: Qwen/Qwen2.5-0.5B-Instruct}
+      - {name: ADAPTER_NAME, value: lab-assistant}
+      - {name: MLFLOW_TRACKING_URI, value: http://mlflow.mlops.svc.cluster.local}
+      - {name: MLFLOW_EXPERIMENT_NAME, value: lora-sft}
+      - name: AWS_ACCESS_KEY_ID
+        valueFrom: {secretKeyRef: {name: minio-creds, key: AWS_ACCESS_KEY_ID}}
+      - name: AWS_SECRET_ACCESS_KEY
+        valueFrom: {secretKeyRef: {name: minio-creds, key: AWS_SECRET_ACCESS_KEY}}
+      - name: AWS_ENDPOINT_URL
+        valueFrom: {secretKeyRef: {name: minio-creds, key: AWS_ENDPOINT_URL}}
+      - name: MLFLOW_S3_ENDPOINT_URL
+        valueFrom: {secretKeyRef: {name: minio-creds, key: MLFLOW_S3_ENDPOINT_URL}}
+    command:
+      - bash
+      - -c
+      - |
+        set -e
+        pip install -q "transformers>=4.44" "peft>=0.12" boto3 mlflow
+        cat > /tmp/sft.py <<'PY'
+        import os, torch, boto3, mlflow
+        from pathlib import Path
+        from transformers import AutoTokenizer, AutoModelForCausalLM
+        from peft import LoraConfig, get_peft_model
+
+        base, name = os.environ["BASE_MODEL"], os.environ["ADAPTER_NAME"]
+        tok = AutoTokenizer.from_pretrained(base)
+        model = AutoModelForCausalLM.from_pretrained(base, torch_dtype=torch.bfloat16).cuda()
+        model = get_peft_model(model, LoraConfig(
+            r=16, lora_alpha=32, lora_dropout=0.05, task_type="CAUSAL_LM",
+            target_modules=["q_proj", "k_proj", "v_proj", "o_proj"]))
+        model.print_trainable_parameters()
+
+        # Tiny inline dataset — replace with your data from s3://datasets
+        pairs = [
+          ("What is the lab's AI gateway?", "Envoy AI Gateway, reachable at the MetalLB IP on port 80."),
+          ("Which engine serves models in the lab?", "vLLM, with LMCache for KV-cache offload and sharing."),
+          ("How are training jobs queued?", "Kueue admits TrainJobs and RayJobs against GPU quotas."),
+          ("Where are checkpoints stored?", "In MinIO, bucket checkpoints, and tracked in MLflow."),
+        ] * 25
+        def encode(q, a):
+            msgs = [{"role": "user", "content": q}, {"role": "assistant", "content": a}]
+            ids = tok.apply_chat_template(msgs, tokenize=True, return_tensors="pt")[0]
+            return ids
+        data = [encode(q, a) for q, a in pairs]
+
+        opt = torch.optim.AdamW(model.parameters(), lr=2e-4)
+        model.train()
+        with mlflow.start_run(run_name=name):
+            mlflow.log_params({"base_model": base, "r": 16, "alpha": 32, "lr": 2e-4, "examples": len(data)})
+            for epoch in range(3):
+                for i, ids in enumerate(data):
+                    ids = ids.unsqueeze(0).cuda()
+                    loss = model(input_ids=ids, labels=ids).loss
+                    loss.backward(); opt.step(); opt.zero_grad()
+                    if i % 20 == 0:
+                        step = epoch * len(data) + i
+                        print(f"epoch {epoch} step {i} loss {loss.item():.4f}", flush=True)
+                        mlflow.log_metric("loss", loss.item(), step=step)
+
+            out = Path(f"/tmp/{name}"); model.save_pretrained(out); tok.save_pretrained(out)
+            s3 = boto3.client("s3")
+            for f in out.rglob("*"):
+                if f.is_file():
+                    s3.upload_file(str(f), "checkpoints", f"adapters/{name}/{f.relative_to(out)}")
+            mlflow.log_param("adapter_uri", f"s3://checkpoints/adapters/{name}")
+        print("uploaded adapter to s3://checkpoints/adapters/" + name)
+        PY
+        python /tmp/sft.py

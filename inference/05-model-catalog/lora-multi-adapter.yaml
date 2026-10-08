@@ -1,0 +1,64 @@
+# One base model + many LoRA adapters. Adapters are produced by
+# training/05-jobs/trainjob-lora-finetune.yaml and uploaded to
+# s3://checkpoints/adapters/<name> (MinIO). The initContainer syncs them into
+# the shared model cache before vLLM starts. Run the fine-tune job FIRST,
+# otherwise --lora-modules points at an empty directory and vLLM fails.
+#
+# Clients pick an adapter with "model": "<adapter-name>".
+# New adapters can be hot-loaded at runtime (VLLM_ALLOW_RUNTIME_LORA_UPDATING):
+#   curl -X POST $URL/v1/load_lora_adapter -H 'content-type: application/json' \
+#     -d '{"lora_name":"support-bot-v2","lora_path":"/models/adapters/support-bot-v2"}'
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-lora
+  namespace: llm-serving
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector: {matchLabels: {app: vllm-lora}}
+  template:
+    metadata:
+      labels: {app: vllm-lora, ai.lab/inference-engine: vllm}
+    spec:
+      runtimeClassName: nvidia
+      initContainers:
+        - name: sync-adapters
+          image: amazon/aws-cli:2.17.0
+          envFrom: [{secretRef: {name: minio-creds}}]
+          command: ["aws", "s3", "sync", "s3://checkpoints/adapters/", "/models/adapters/"]
+          volumeMounts: [{name: models, mountPath: /models}]
+      containers:
+        - name: vllm
+          image: vllm/vllm-openai:v0.10.2
+          command: ["vllm", "serve"]
+          args:
+            - Qwen/Qwen2.5-0.5B-Instruct
+            - --port=8000
+            - --enable-lora
+            - --max-loras=8
+            - --max-lora-rank=64
+            - --lora-modules
+            - lab-assistant=/models/adapters/lab-assistant
+            - --gpu-memory-utilization=0.85
+          env:
+            - {name: HF_HOME, value: /models/hf}
+            - {name: VLLM_ALLOW_RUNTIME_LORA_UPDATING, value: "True"}
+          ports: [{name: http, containerPort: 8000}]
+          readinessProbe: {httpGet: {path: /health, port: 8000}, periodSeconds: 5}
+          startupProbe: {httpGet: {path: /health, port: 8000}, periodSeconds: 10, failureThreshold: 60}
+          resources:
+            requests: {cpu: "4", memory: 16Gi}
+            limits: {nvidia.com/gpu: 1}
+          volumeMounts: [{name: models, mountPath: /models}]
+      volumes:
+        - {name: models, persistentVolumeClaim: {claimName: model-cache}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm-lora
+  namespace: llm-serving
+spec:
+  selector: {app: vllm-lora}
+  ports: [{name: http, port: 8000, targetPort: 8000}]

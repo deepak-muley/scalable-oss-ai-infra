@@ -1,0 +1,51 @@
+# Mixture-of-Experts: 30B total params, ~3B active per token -> fast decode.
+# --enable-expert-parallel places different experts on different GPUs
+# instead of slicing every expert (TP), which scales better for MoE.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-qwen3-moe
+  namespace: llm-serving
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector: {matchLabels: {app: vllm-qwen3-moe}}
+  template:
+    metadata:
+      labels: {app: vllm-qwen3-moe, ai.lab/inference-engine: vllm}
+    spec:
+      runtimeClassName: nvidia
+      containers:
+        - name: vllm
+          image: vllm/vllm-openai:v0.10.2
+          command: ["vllm", "serve"]
+          args:
+            - Qwen/Qwen3-30B-A3B
+            - --port=8000
+            - --tensor-parallel-size=2
+            - --enable-expert-parallel
+            - --max-model-len=32768
+            - --gpu-memory-utilization=0.90
+            - --enable-prefix-caching
+          env: [{name: HF_HOME, value: /models/hf}]
+          ports: [{name: http, containerPort: 8000}]
+          readinessProbe: {httpGet: {path: /health, port: 8000}, periodSeconds: 5}
+          startupProbe: {httpGet: {path: /health, port: 8000}, periodSeconds: 10, failureThreshold: 120}
+          resources:
+            requests: {cpu: "8", memory: 96Gi}
+            limits: {nvidia.com/gpu: 2}
+          volumeMounts:
+            - {name: models, mountPath: /models}
+            - {name: shm, mountPath: /dev/shm}
+      volumes:
+        - {name: models, persistentVolumeClaim: {claimName: model-cache}}
+        - {name: shm, emptyDir: {medium: Memory, sizeLimit: 16Gi}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm-qwen3-moe
+  namespace: llm-serving
+spec:
+  selector: {app: vllm-qwen3-moe}
+  ports: [{name: http, port: 8000, targetPort: 8000}]

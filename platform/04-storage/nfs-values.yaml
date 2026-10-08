@@ -1,0 +1,12 @@
+storageClass:
+  name: nfs-client
+  defaultClass: true
+  reclaimPolicy: Retain        # never auto-delete downloaded models/checkpoints
+  archiveOnDelete: true
+  accessModes: ReadWriteMany
+nfs:
+  mountOptions:
+    - nfsvers=4.1
+    - noatime
+    - rsize=1048576
+    - wsize=1048576

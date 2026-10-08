@@ -1,0 +1,82 @@
+# Two pooling models. Each requests 1 nvidia.com/gpu and only 40% of its
+# memory — with GPU time-slicing enabled (platform/05-gpu-operator/time-slicing-config.yaml)
+# both land on the SAME physical GPU.
+#   /v1/embeddings  -> vllm-embeddings
+#   /v1/score, /rerank -> vllm-reranker
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-embeddings
+  namespace: llm-serving
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: vllm-embeddings}}
+  template:
+    metadata:
+      labels: {app: vllm-embeddings, ai.lab/inference-engine: vllm}
+    spec:
+      runtimeClassName: nvidia
+      containers:
+        - name: vllm
+          image: vllm/vllm-openai:v0.10.2
+          command: ["vllm", "serve"]
+          # pooling is auto-detected for encoder models; older vLLM: --task embed
+          args: [BAAI/bge-m3, --port=8000, --gpu-memory-utilization=0.40, --max-model-len=8192]
+          env: [{name: HF_HOME, value: /models/hf}]
+          ports: [{name: http, containerPort: 8000}]
+          readinessProbe: {httpGet: {path: /health, port: 8000}, periodSeconds: 5}
+          startupProbe: {httpGet: {path: /health, port: 8000}, periodSeconds: 10, failureThreshold: 60}
+          resources:
+            requests: {cpu: "2", memory: 12Gi}
+            limits: {nvidia.com/gpu: 1}
+          volumeMounts: [{name: models, mountPath: /models}]
+      volumes:
+        - {name: models, persistentVolumeClaim: {claimName: model-cache}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm-embeddings
+  namespace: llm-serving
+spec:
+  selector: {app: vllm-embeddings}
+  ports: [{name: http, port: 8000, targetPort: 8000}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-reranker
+  namespace: llm-serving
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: vllm-reranker}}
+  template:
+    metadata:
+      labels: {app: vllm-reranker, ai.lab/inference-engine: vllm}
+    spec:
+      runtimeClassName: nvidia
+      containers:
+        - name: vllm
+          image: vllm/vllm-openai:v0.10.2
+          command: ["vllm", "serve"]
+          # cross-encoder -> /v1/score and /rerank ; older vLLM: --task score
+          args: [BAAI/bge-reranker-v2-m3, --port=8000, --gpu-memory-utilization=0.40, --max-model-len=8192]
+          env: [{name: HF_HOME, value: /models/hf}]
+          ports: [{name: http, containerPort: 8000}]
+          readinessProbe: {httpGet: {path: /health, port: 8000}, periodSeconds: 5}
+          startupProbe: {httpGet: {path: /health, port: 8000}, periodSeconds: 10, failureThreshold: 60}
+          resources:
+            requests: {cpu: "2", memory: 12Gi}
+            limits: {nvidia.com/gpu: 1}
+          volumeMounts: [{name: models, mountPath: /models}]
+      volumes:
+        - {name: models, persistentVolumeClaim: {claimName: model-cache}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm-reranker
+  namespace: llm-serving
+spec:
+  selector: {app: vllm-reranker}
+  ports: [{name: http, port: 8000, targetPort: 8000}]

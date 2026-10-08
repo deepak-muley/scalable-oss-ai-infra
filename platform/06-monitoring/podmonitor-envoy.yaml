@@ -1,0 +1,17 @@
+# Envoy proxies created by Envoy Gateway expose Prometheus stats on 19001.
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: envoy-proxies
+  namespace: monitoring
+spec:
+  namespaceSelector:
+    matchNames: [envoy-gateway-system]
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: proxy
+      app.kubernetes.io/managed-by: envoy-gateway
+  podMetricsEndpoints:
+    - targetPort: 19001
+      path: /stats/prometheus
+      interval: 15s

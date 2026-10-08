@@ -1,0 +1,83 @@
+# Model larger than one node: 1 replica = 1 leader + 1 worker pod (2 nodes x 8 GPU).
+# vLLM uses a Ray cluster formed inside the group:
+#   tensor-parallel 8 (inside a node, NVLink) x pipeline-parallel 2 (across nodes)
+# Requires platform/08-lws. Fast inter-node networking (IB/RoCE) strongly advised.
+apiVersion: leaderworkerset.x-k8s.io/v1
+kind: LeaderWorkerSet
+metadata:
+  name: vllm-llama405b
+  namespace: llm-serving
+spec:
+  replicas: 1
+  leaderWorkerTemplate:
+    size: 2                                  # pods per group (leader + workers)
+    restartPolicy: RecreateGroupOnPodRestart # one pod dies -> restart the group
+    leaderTemplate:
+      metadata:
+        labels: {role: leader, ai.lab/inference-engine: vllm}
+      spec:
+        runtimeClassName: nvidia
+        containers:
+          - name: vllm-leader
+            image: vllm/vllm-openai:v0.10.2
+            command: ["sh", "-c"]
+            args:
+              - >
+                bash /vllm-workspace/examples/online_serving/multi-node-serving.sh leader --ray_cluster_size=$(LWS_GROUP_SIZE);
+                vllm serve meta-llama/Llama-3.1-405B-Instruct-FP8
+                --port 8000
+                --tensor-parallel-size 8
+                --pipeline-parallel-size 2
+                --max-model-len 32768
+                --gpu-memory-utilization 0.92
+            env:
+              - {name: HF_HOME, value: /models/hf}
+              - name: HF_TOKEN
+                valueFrom: {secretKeyRef: {name: hf-token, key: token}}
+            ports: [{name: http, containerPort: 8000}]
+            readinessProbe:
+              tcpSocket: {port: 8000}
+              initialDelaySeconds: 60
+              periodSeconds: 10
+            resources:
+              limits: {nvidia.com/gpu: "8"}
+              requests: {cpu: "32", memory: 800Gi}
+            volumeMounts:
+              - {name: models, mountPath: /models}
+              - {name: shm, mountPath: /dev/shm}
+        volumes:
+          - {name: models, persistentVolumeClaim: {claimName: model-cache}}
+          - {name: shm, emptyDir: {medium: Memory, sizeLimit: 64Gi}}
+    workerTemplate:
+      spec:
+        runtimeClassName: nvidia
+        containers:
+          - name: vllm-worker
+            image: vllm/vllm-openai:v0.10.2
+            command: ["sh", "-c"]
+            args:
+              - bash /vllm-workspace/examples/online_serving/multi-node-serving.sh worker --ray_address=$(LWS_LEADER_ADDRESS)
+            env:
+              - {name: HF_HOME, value: /models/hf}
+              - name: HF_TOKEN
+                valueFrom: {secretKeyRef: {name: hf-token, key: token}}
+            resources:
+              limits: {nvidia.com/gpu: "8"}
+              requests: {cpu: "32", memory: 800Gi}
+            volumeMounts:
+              - {name: models, mountPath: /models}
+              - {name: shm, mountPath: /dev/shm}
+        volumes:
+          - {name: models, persistentVolumeClaim: {claimName: model-cache}}
+          - {name: shm, emptyDir: {medium: Memory, sizeLimit: 64Gi}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm-llama405b
+  namespace: llm-serving
+spec:
+  selector:
+    leaderworkerset.sigs.k8s.io/name: vllm-llama405b
+    role: leader
+  ports: [{name: http, port: 8000, targetPort: 8000}]

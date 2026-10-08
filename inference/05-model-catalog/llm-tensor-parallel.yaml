@@ -1,0 +1,57 @@
+# 70B dense model sharded across 4 GPUs of ONE node (tensor parallel).
+# Weights bf16 ~140 GB; on 2x80GB use an FP8 checkpoint or --quantization fp8.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-llama70b
+  namespace: llm-serving
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector: {matchLabels: {app: vllm-llama70b}}
+  template:
+    metadata:
+      labels: {app: vllm-llama70b, ai.lab/inference-engine: vllm}
+    spec:
+      runtimeClassName: nvidia
+      # keep all 4 GPUs on a node with NVLink; GFD labels help select it
+      # nodeSelector: {nvidia.com/gpu.product: NVIDIA-H100-80GB-HBM3}
+      containers:
+        - name: vllm
+          image: vllm/vllm-openai:v0.10.2
+          command: ["vllm", "serve"]
+          args:
+            - meta-llama/Llama-3.3-70B-Instruct
+            - --port=8000
+            - --tensor-parallel-size=4
+            - --max-model-len=65536
+            - --gpu-memory-utilization=0.92
+            - --kv-cache-dtype=fp8
+            - --enable-prefix-caching
+            - --enable-chunked-prefill
+            # - --quantization=fp8      # on-the-fly FP8 weights (Hopper/Ada+)
+          env:
+            - {name: HF_HOME, value: /models/hf}
+            - name: HF_TOKEN
+              valueFrom: {secretKeyRef: {name: hf-token, key: token}}
+          ports: [{name: http, containerPort: 8000}]
+          readinessProbe: {httpGet: {path: /health, port: 8000}, periodSeconds: 5}
+          startupProbe: {httpGet: {path: /health, port: 8000}, periodSeconds: 10, failureThreshold: 180}
+          resources:
+            requests: {cpu: "16", memory: 200Gi}
+            limits: {nvidia.com/gpu: 4}
+          volumeMounts:
+            - {name: models, mountPath: /models}
+            - {name: shm, mountPath: /dev/shm}
+      volumes:
+        - {name: models, persistentVolumeClaim: {claimName: model-cache}}
+        - {name: shm, emptyDir: {medium: Memory, sizeLimit: 32Gi}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm-llama70b
+  namespace: llm-serving
+spec:
+  selector: {app: vllm-llama70b}
+  ports: [{name: http, port: 8000, targetPort: 8000}]

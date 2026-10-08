@@ -1,0 +1,30 @@
+# Alternative remote KV tier: Valkey (Redis-compatible). Point
+# remote_url at redis://valkey.llm-serving.svc.cluster.local:6379
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: valkey
+  namespace: llm-serving
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: valkey}}
+  template:
+    metadata: {labels: {app: valkey}}
+    spec:
+      containers:
+        - name: valkey
+          image: valkey/valkey:8
+          args: ["--maxmemory", "48gb", "--maxmemory-policy", "allkeys-lru", "--save", ""]
+          ports: [{containerPort: 6379}]
+          resources:
+            requests: {cpu: "2", memory: 50Gi}
+            limits: {memory: 56Gi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: valkey
+  namespace: llm-serving
+spec:
+  selector: {app: valkey}
+  ports: [{port: 6379, targetPort: 6379}]

@@ -1,0 +1,30 @@
+# Replaces the API-key SecurityPolicy: validate Keycloak-issued JWTs at the edge.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: SecurityPolicy
+metadata:
+  name: api-key-auth            # same name => replaces gateway/03 api-key policy
+  namespace: ai-gateway
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: ai-gateway
+  jwt:
+    providers:
+      - name: keycloak
+        # must equal the "iss" claim: the URL clients used to get the token
+        issuer: http://keycloak.ai.lab/realms/ai-lab
+        remoteJWKS:
+          uri: http://keycloak-keycloakx-http.security.svc.cluster.local/realms/ai-lab/protocol/openid-connect/certs
+        claimToHeaders:
+          - {claim: sub, header: x-user-id}        # -> token budget key (optional-token-ratelimit.yaml)
+          - {claim: tenant, header: x-tenant-id}
+  # Coarse authorization: only members of group "ai-lab-users" get in.
+  # authorization:
+  #   defaultAction: Deny
+  #   rules:
+  #     - action: Allow
+  #       principal:
+  #         jwt:
+  #           provider: keycloak
+  #           claims: [{name: groups, valueType: StringArray, values: ["ai-lab-users"]}]

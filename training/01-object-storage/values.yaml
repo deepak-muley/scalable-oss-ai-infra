@@ -1,0 +1,16 @@
+mode: standalone            # lab: one pod; use mode=distributed (4+ drives) for real
+replicas: 1
+persistence:
+  enabled: true
+  size: 2Ti
+  storageClass: ""          # default class; prefer local NVMe-backed storage
+resources:
+  requests:
+    memory: 2Gi             # chart default is 16Gi
+buckets:
+  - {name: datasets, policy: none, purge: false}
+  - {name: checkpoints, policy: none, purge: false}
+  - {name: mlflow, policy: none, purge: false}
+  - {name: models, policy: none, purge: false}
+consoleService:
+  type: ClusterIP

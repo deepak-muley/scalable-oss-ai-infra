@@ -1,0 +1,26 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-memory-on-gpu-pods
+spec:
+  validationFailureAction: Audit
+  background: true
+  rules:
+    - name: gpu-containers-set-memory
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+      preconditions:
+        any:
+          - key: "{{ request.object.spec.containers[].resources.limits.\"nvidia.com/gpu\" || `[]` | length(@) }}"
+            operator: GreaterThan
+            value: 0
+      validate:
+        message: "Pods requesting nvidia.com/gpu must set memory requests on every container."
+        pattern:
+          spec:
+            containers:
+              - resources:
+                  requests:
+                    memory: "?*"

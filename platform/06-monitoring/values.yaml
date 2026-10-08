@@ -1,0 +1,22 @@
+fullnameOverride: kps                       # -> service kps-prometheus
+grafana:
+  adminPassword: prom-operator              # CHANGE ME
+  persistence:
+    enabled: true
+    size: 5Gi
+prometheus:
+  prometheusSpec:
+    # Pick up ServiceMonitors/PodMonitors from ANY namespace/release,
+    # not only the ones labelled release=kps.
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    retention: 15d
+    scrapeInterval: 15s
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 50Gi

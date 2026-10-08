@@ -1,0 +1,43 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: envoy-ai-gateway
+spec:
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: ai-gateway
+  namespace: ai-gateway
+spec:
+  gatewayClassName: envoy-ai-gateway
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+      allowedRoutes:
+        namespaces:
+          from: All          # lets llm-serving own its own AIGatewayRoutes too
+  # For TLS: add an HTTPS listener with a cert from cert-manager's lab-ca:
+  #  - name: https
+  #    protocol: HTTPS
+  #    port: 443
+  #    hostname: "api.ai.lab"
+  #    tls:
+  #      certificateRefs: [{name: api-ai-lab-tls}]
+---
+# LLM requests are big (long contexts, base64 images) — raise Envoy's
+# default 32KiB buffer, otherwise you get 413s.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: ClientTrafficPolicy
+metadata:
+  name: ai-gateway-buffer
+  namespace: ai-gateway
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: ai-gateway
+  connection:
+    bufferLimit: 50Mi

@@ -1,0 +1,19 @@
+# EDIT the address range to free IPs on your lab LAN.
+apiVersion: metallb.io/v1beta1
+kind: IPAddressPool
+metadata:
+  name: lab-pool
+  namespace: metallb-system
+spec:
+  addresses:
+    - 192.168.1.240-192.168.1.250
+---
+# L2 mode: simplest; one node answers ARP for each IP. Use BGP mode if your
+# lab router speaks BGP and you want real multi-node load spreading.
+apiVersion: metallb.io/v1beta1
+kind: L2Advertisement
+metadata:
+  name: lab-l2
+  namespace: metallb-system
+spec:
+  ipAddressPools: [lab-pool]

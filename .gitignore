@@ -1,0 +1,16 @@
+# fetched at install time from upstream (see gateway/01-envoy-gateway/install.sh)
+gateway/01-envoy-gateway/envoy-gateway-values.yaml
+gateway/01-envoy-gateway/values-addon-*.yaml
+# never commit secrets
+*.secret.yaml
+*-secret.yaml
+!*-secret.example.yaml
+.env
+*.kubeconfig
+kubeconfig*
+# local
+.DS_Store
+.idea/
+.vscode/
+__pycache__/
+results/

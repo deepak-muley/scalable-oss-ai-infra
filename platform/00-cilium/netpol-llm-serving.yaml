@@ -1,0 +1,22 @@
+# Zero-trust for the model servers: only the AI gateway's Envoy pods,
+# Prometheus, KEDA and pods inside llm-serving may talk to llm-serving.
+# Apply AFTER everything works — then verify with `hubble observe --verdict DROPPED`.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: llm-serving-ingress
+  namespace: llm-serving
+spec:
+  endpointSelector: {}
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: llm-serving
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: envoy-gateway-system
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: monitoring
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: evaluation
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: training     # batch jobs hitting models

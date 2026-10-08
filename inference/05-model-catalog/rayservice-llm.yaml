@@ -1,0 +1,80 @@
+# KubeRay RayService running Ray Serve LLM (vLLM engine inside Ray actors).
+# Requires training/04-kuberay (the operator serves both training & serving).
+#
+# Why Ray Serve LLM vs plain vLLM Deployments?
+#  * Python-native composition: put pre/post-processing, guardrails, tool
+#    calls, multi-model pipelines in the same Serve app.
+#  * Ray autoscaler scales replicas AND asks KubeRay for more GPU worker pods.
+#  * Same Ray cluster pattern as RL/post-training (rollouts = Serve/vLLM).
+apiVersion: ray.io/v1
+kind: RayService
+metadata:
+  name: ray-llm
+  namespace: llm-serving
+spec:
+  serveConfigV2: |
+    applications:
+      - name: llms
+        route_prefix: /
+        import_path: ray.serve.llm:build_openai_app
+        args:
+          llm_configs:
+            - model_loading_config:
+                model_id: ray-qwen-1.5b                  # name clients use
+                model_source: Qwen/Qwen2.5-1.5B-Instruct
+              deployment_config:
+                autoscaling_config:
+                  min_replicas: 1
+                  max_replicas: 2
+                  target_ongoing_requests: 32
+              engine_kwargs:
+                max_model_len: 8192
+                gpu_memory_utilization: 0.85
+                enable_prefix_caching: true
+  rayClusterConfig:
+    enableInTreeAutoscaling: true
+    headGroupSpec:
+      rayStartParams:
+        dashboard-host: "0.0.0.0"
+        num-gpus: "0"                 # keep GPU work off the head
+      template:
+        spec:
+          containers:
+            - name: ray-head
+              image: rayproject/ray-llm:2.46.0-py311-cu124   # pin to a current tag
+              env: [{name: HF_HOME, value: /models/hf}]
+              ports:
+                - {containerPort: 6379, name: gcs}
+                - {containerPort: 8265, name: dashboard}
+                - {containerPort: 8000, name: serve}
+              resources:
+                requests: {cpu: "2", memory: 8Gi}
+                limits: {memory: 8Gi}
+              volumeMounts: [{name: models, mountPath: /models}]
+          volumes:
+            - {name: models, persistentVolumeClaim: {claimName: model-cache}}
+    workerGroupSpecs:
+      - groupName: gpu-workers
+        replicas: 1
+        minReplicas: 0
+        maxReplicas: 2
+        rayStartParams: {}
+        template:
+          spec:
+            runtimeClassName: nvidia
+            containers:
+              - name: ray-worker
+                image: rayproject/ray-llm:2.46.0-py311-cu124
+                env: [{name: HF_HOME, value: /models/hf}]
+                resources:
+                  requests: {cpu: "4", memory: 24Gi}
+                  limits: {nvidia.com/gpu: 1, memory: 32Gi}
+                volumeMounts:
+                  - {name: models, mountPath: /models}
+                  - {name: shm, mountPath: /dev/shm}
+            volumes:
+              - {name: models, persistentVolumeClaim: {claimName: model-cache}}
+              - {name: shm, emptyDir: {medium: Memory, sizeLimit: 8Gi}}
+# KubeRay creates service "ray-llm-serve-svc" (port 8000) for the Serve app:
+#   kubectl -n llm-serving port-forward svc/ray-llm-serve-svc 8000:8000
+#   curl localhost:8000/v1/chat/completions -d '{"model":"ray-qwen-1.5b",...}'

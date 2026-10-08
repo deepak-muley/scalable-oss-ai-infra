@@ -1,0 +1,10 @@
+server:
+  dev:
+    enabled: true            # LAB ONLY: in-memory, auto-unsealed
+    devRootToken: root
+  resources:
+    requests: {cpu: 100m, memory: 256Mi}
+injector:
+  enabled: false             # we use ESO instead of sidecar injection
+ui:
+  enabled: true

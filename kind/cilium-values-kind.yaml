@@ -1,0 +1,21 @@
+# Cilium tuned for kind (docker nodes). k8sServiceHost is set by up.sh.
+kubeProxyReplacement: true
+ipam:
+  mode: kubernetes
+l2announcements:
+  enabled: true
+externalIPs:
+  enabled: true
+k8sClientRateLimit:
+  qps: 50
+  burst: 100
+gatewayAPI:
+  enabled: false
+hubble:
+  enabled: true
+  relay:
+    enabled: true
+  ui:
+    enabled: true
+operator:
+  replicas: 1

@@ -1,0 +1,8 @@
+# Watch all namespaces (training, llm-serving, evaluation).
+singleNamespaceInstall: false
+batchScheduler:
+  # Kueue integrates via the queue-name label, no batch scheduler needed.
+  enabled: false
+resources:
+  requests: {cpu: 100m, memory: 512Mi}
+  limits: {memory: 1Gi}

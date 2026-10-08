@@ -1,0 +1,33 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: lm-eval-gsm8k
+  namespace: evaluation
+  labels:
+    kueue.x-k8s.io/queue-name: batch
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: lm-eval
+          image: python:3.12-slim
+          env:
+            - {name: MODEL, value: "Qwen/Qwen2.5-1.5B-Instruct"}
+            - {name: GATEWAY, value: "http://envoy-ai-gateway.ai-gateway.svc.cluster.local"}   # see note below
+            - {name: API_KEY, value: "sk-lab-eval-change-me"}
+          # NOTE: Envoy Gateway names the proxy Service envoy-ai-gateway-ai-gateway-<hash>.
+          # Find it with:  kubectl get svc -n envoy-gateway-system
+          # and set GATEWAY=http://<that-name>.envoy-gateway-system.svc.cluster.local
+          command: ["bash", "-c"]
+          args:
+            - |
+              pip install -q "lm-eval[api]" && \
+              lm_eval --model local-chat-completions \
+                --model_args "model=${MODEL},base_url=${GATEWAY}/v1/chat/completions,num_concurrent=8,max_retries=3,tokenized_requests=False,header={\"x-api-key\":\"${API_KEY}\"}" \
+                --tasks gsm8k --apply_chat_template --fewshot_as_multiturn \
+                --limit 200 --output_path /tmp/results && \
+              cat /tmp/results/*/*.json | head -c 4000
+          resources:
+            requests: {cpu: "1", memory: 2Gi}

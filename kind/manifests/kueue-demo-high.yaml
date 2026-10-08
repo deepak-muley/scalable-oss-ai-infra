@@ -1,0 +1,21 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: high-c
+  namespace: training
+  labels:
+    kueue.x-k8s.io/queue-name: research
+    kueue.x-k8s.io/priority-class: high
+spec:
+  parallelism: 2
+  completions: 2
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: work
+          image: busybox:1.36
+          command: ["sh", "-c", "echo urgent job; sleep 300"]
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {nvidia.com/gpu: 2}

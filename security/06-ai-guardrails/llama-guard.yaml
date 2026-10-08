@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llama-guard
+  namespace: llm-serving
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: llama-guard}}
+  template:
+    metadata:
+      labels: {app: llama-guard, ai.lab/inference-engine: vllm}
+    spec:
+      runtimeClassName: nvidia
+      containers:
+        - name: vllm
+          image: vllm/vllm-openai:v0.10.2
+          command: ["vllm", "serve"]
+          args:
+            - meta-llama/Llama-Guard-3-1B          # gated: accept licence on HF
+            - --port=8000
+            - --max-model-len=8192
+            - --gpu-memory-utilization=0.30        # small; share a GPU via time-slicing
+          env:
+            - {name: HF_HOME, value: /models/hf}
+            - name: HF_TOKEN
+              valueFrom: {secretKeyRef: {name: hf-token, key: token}}
+          ports: [{name: http, containerPort: 8000}]
+          readinessProbe: {httpGet: {path: /health, port: 8000}, periodSeconds: 5}
+          startupProbe: {httpGet: {path: /health, port: 8000}, periodSeconds: 10, failureThreshold: 60}
+          resources:
+            requests: {cpu: "2", memory: 8Gi}
+            limits: {nvidia.com/gpu: 1}
+          volumeMounts: [{name: models, mountPath: /models}]
+      volumes:
+        - {name: models, persistentVolumeClaim: {claimName: model-cache}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: llama-guard
+  namespace: llm-serving
+spec:
+  selector: {app: llama-guard}
+  ports: [{name: http, port: 8000, targetPort: 8000}]

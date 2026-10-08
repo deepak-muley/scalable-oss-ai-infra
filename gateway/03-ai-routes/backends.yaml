@@ -1,0 +1,56 @@
+# ---------------------------------------------------------------------------
+# Backend #1: vLLM production-stack router (inference/04-production-stack).
+# The stack router itself fans out to N engines with prefix/session/KV-aware
+# routing, so the gateway only needs one backend for the whole stack.
+# ---------------------------------------------------------------------------
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: Backend
+metadata:
+  name: vllm-stack-router
+  namespace: ai-gateway
+spec:
+  endpoints:
+    - fqdn:
+        hostname: vllm-router-service.llm-serving.svc.cluster.local
+        port: 80
+---
+apiVersion: aigateway.envoyproxy.io/v1alpha1
+kind: AIServiceBackend
+metadata:
+  name: vllm-stack
+  namespace: ai-gateway
+spec:
+  schema:
+    name: OpenAI          # vLLM speaks the OpenAI API
+  backendRef:
+    name: vllm-stack-router
+    kind: Backend
+    group: gateway.envoyproxy.io
+---
+# ---------------------------------------------------------------------------
+# Backend #2: a single "raw" vLLM Deployment (inference/02-vllm-basic or
+# 03-lmcache). Useful for learning/experiments outside the stack.
+# ---------------------------------------------------------------------------
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: Backend
+metadata:
+  name: vllm-basic
+  namespace: ai-gateway
+spec:
+  endpoints:
+    - fqdn:
+        hostname: vllm-qwen-7b.llm-serving.svc.cluster.local
+        port: 8000
+---
+apiVersion: aigateway.envoyproxy.io/v1alpha1
+kind: AIServiceBackend
+metadata:
+  name: vllm-basic
+  namespace: ai-gateway
+spec:
+  schema:
+    name: OpenAI
+  backendRef:
+    name: vllm-basic
+    kind: Backend
+    group: gateway.envoyproxy.io

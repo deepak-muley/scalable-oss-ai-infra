@@ -1,0 +1,21 @@
+# Autoscale a production-stack engine. Deployment name pattern is
+#   <release>-<modelSpec.name>-deployment-vllm   (verify: kubectl get deploy -n llm-serving)
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: vllm-llama8b
+  namespace: llm-serving
+spec:
+  scaleTargetRef:
+    name: vllm-llama8b-deployment-vllm
+  minReplicaCount: 1
+  maxReplicaCount: 4
+  pollingInterval: 15
+  cooldownPeriod: 600
+  triggers:
+    - type: prometheus
+      metricType: AverageValue
+      metadata:
+        serverAddress: http://kps-prometheus.monitoring.svc:9090
+        query: sum(vllm:num_requests_waiting{namespace="llm-serving", pod=~"vllm-llama8b-deployment-vllm-.*"})
+        threshold: "5"

@@ -1,0 +1,25 @@
+# 1 control plane + 1 "system" worker + 2 "GPU" workers (GPUs are simulated).
+# No default CNI and no kube-proxy: Cilium provides both.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: ai-lab
+networking:
+  disableDefaultCNI: true
+  kubeProxyMode: none
+  podSubnet: 10.244.0.0/16
+  serviceSubnet: 10.96.0.0/16
+nodes:
+  - role: control-plane
+  - role: worker
+    labels:
+      ai.lab/node-pool: system
+  - role: worker
+    labels:
+      ai.lab/node-pool: gpu-sim
+      nvidia.com/gpu.present: "true"
+      nvidia.com/gpu.product: SIM-GPU-80GB
+  - role: worker
+    labels:
+      ai.lab/node-pool: gpu-sim
+      nvidia.com/gpu.present: "true"
+      nvidia.com/gpu.product: SIM-GPU-80GB

@@ -1,0 +1,12 @@
+service:
+  type: ClusterIP
+  port: 80
+backendStore:
+  databaseMigration: true   # sqlite on the pod by default; use postgres for real
+artifactRoot:
+  proxiedArtifactStorage: true
+  s3:
+    enabled: true
+    bucket: mlflow
+extraEnvVars:
+  MLFLOW_S3_ENDPOINT_URL: http://minio.mlops.svc.cluster.local:9000

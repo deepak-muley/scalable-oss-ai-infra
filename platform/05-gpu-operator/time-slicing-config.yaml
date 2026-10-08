@@ -1,0 +1,19 @@
+# Each physical GPU is advertised as 4 "nvidia.com/gpu". Pods share compute by
+# time-slicing; there is NO memory isolation — set vLLM
+# --gpu-memory-utilization so that the co-tenants fit (e.g. 0.2 each).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: time-slicing-config
+  namespace: gpu-operator
+data:
+  any: |-
+    version: v1
+    flags:
+      migStrategy: none
+    sharing:
+      timeSlicing:
+        renameByDefault: false
+        resources:
+          - name: nvidia.com/gpu
+            replicas: 4

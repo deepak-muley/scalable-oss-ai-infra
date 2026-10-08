@@ -1,0 +1,58 @@
+# Namespaces owned by this lab. Operators installed by Helm create their own
+# namespaces (--create-namespace); these are the "workload" namespaces.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ai-gateway          # Gateway + AIGatewayRoutes (the public entry point)
+  labels:
+    ai.lab/layer: gateway
+    pod-security.kubernetes.io/enforce: baseline   # no privileged/hostPath pods
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: llm-serving         # vLLM engines, routers, LMCache servers
+  labels:
+    ai.lab/layer: inference
+    pod-security.kubernetes.io/enforce: baseline   # no privileged/hostPath pods
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: training            # TrainJobs, RayJobs, checkpoints
+  labels:
+    ai.lab/layer: training
+    pod-security.kubernetes.io/enforce: baseline   # no privileged/hostPath pods
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mlops               # MinIO, MLflow
+  labels:
+    ai.lab/layer: mlops
+    pod-security.kubernetes.io/enforce: baseline   # no privileged/hostPath pods
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: evaluation          # benchmarks, lm-eval jobs
+  labels:
+    ai.lab/layer: evaluation
+    pod-security.kubernetes.io/enforce: baseline   # no privileged/hostPath pods
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: security            # Keycloak, OpenBao, Falco UI
+  labels:
+    ai.lab/layer: security

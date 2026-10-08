@@ -1,0 +1,56 @@
+driver:
+  kind: modern_ebpf          # no kernel module needed (kernel >= 5.8)
+tty: true
+collectors:
+  kubernetes:
+    enabled: true            # enrich events with pod/namespace
+falcosidekick:
+  enabled: true
+  webui:
+    enabled: true
+    redis:
+      storageEnabled: false
+tolerations:                 # run on GPU nodes too
+  - operator: Exists
+customRules:
+  ai-lab-rules.yaml: |-
+    - list: ai_lab_ns
+      items: [llm-serving, training, evaluation]
+
+    - list: gpu_miner_binaries
+      items: [xmrig, t-rex, nbminer, lolminer, gminer, ethminer, phoenixminer, nanominer, teamredminer]
+
+    - rule: Interactive shell in AI workload
+      desc: A human opened a shell in a model-serving or training container
+      condition: >
+        spawned_process and container and k8s.ns.name in (ai_lab_ns)
+        and proc.name in (bash, sh, zsh, dash) and proc.tty != 0
+      output: "Shell in AI workload (user=%user.name pod=%k8s.pod.name ns=%k8s.ns.name cmd=%proc.cmdline)"
+      priority: WARNING
+      tags: [ai-lab, shell]
+
+    - rule: GPU crypto miner launched
+      desc: Known GPU mining binary executed in a container
+      condition: spawned_process and container and proc.name in (gpu_miner_binaries)
+      output: "Crypto miner on GPU node (proc=%proc.cmdline pod=%k8s.pod.name ns=%k8s.ns.name image=%container.image.repository)"
+      priority: CRITICAL
+      tags: [ai-lab, cryptomining]
+
+    - rule: Model server reads service account token
+      desc: vLLM does not need the Kubernetes API; reading the SA token is suspicious
+      condition: >
+        open_read and container and k8s.ns.name = "llm-serving"
+        and fd.name startswith /var/run/secrets/kubernetes.io/serviceaccount
+        and not proc.name in (aws, mc)
+      output: "SA token read in llm-serving (proc=%proc.cmdline pod=%k8s.pod.name file=%fd.name)"
+      priority: WARNING
+      tags: [ai-lab, credentials]
+
+    - rule: Model server outbound to internet
+      desc: Serving pods should only talk in-cluster (weights come from the shared cache)
+      condition: >
+        outbound and container and k8s.ns.name = "llm-serving"
+        and not (fd.snet in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"))
+      output: "Egress from model server (pod=%k8s.pod.name dest=%fd.name proc=%proc.cmdline)"
+      priority: NOTICE
+      tags: [ai-lab, exfiltration]

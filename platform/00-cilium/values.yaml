@@ -1,0 +1,62 @@
+# Bare-metal lab profile. Full reference: helm show values cilium/cilium
+kubeProxyReplacement: true
+
+ipam:
+  mode: kubernetes                 # use the node podCIDRs from kubeadm --pod-network-cidr
+
+# Native routing is faster than VXLAN when all nodes share an L2 segment.
+# Leave tunnel mode (default) if unsure / nodes in different subnets.
+# routingMode: native
+# autoDirectNodeRoutes: true
+# ipv4NativeRoutingCIDR: 10.244.0.0/16
+
+bpf:
+  masquerade: true
+
+bandwidthManager:
+  enabled: true
+  bbr: true
+
+# LoadBalancer IPs for Services (replaces MetalLB)
+l2announcements:
+  enabled: true
+externalIPs:
+  enabled: true
+# L2 announcements use leases; raise client rate limits accordingly
+k8sClientRateLimit:
+  qps: 50
+  burst: 100
+
+gatewayAPI:
+  enabled: false                   # Envoy Gateway owns Gateway API in this lab
+
+hubble:
+  enabled: true
+  relay:
+    enabled: true
+  ui:
+    enabled: true
+  metrics:
+    enabled:
+      - dns
+      - drop
+      - tcp
+      - flow
+      - port-distribution
+      - "httpV2:exemplars=true;labelsContext=source_ip,source_namespace,source_workload,destination_namespace,destination_workload,traffic_direction"
+    serviceMonitor:
+      enabled: false               # flip to true after platform/06-monitoring is installed
+
+prometheus:
+  enabled: true
+operator:
+  replicas: 1                      # 2 for HA on multi-control-plane clusters
+  prometheus:
+    enabled: true
+
+# Transparent node-to-node encryption of all pod traffic (prompts, KV-cache
+# transfers, checkpoints). Small CPU cost; enable for multi-tenant labs.
+# encryption:
+#   enabled: true
+#   type: wireguard
+#   nodeEncryption: false

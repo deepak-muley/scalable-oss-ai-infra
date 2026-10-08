@@ -1,0 +1,41 @@
+# CPU-only Ray job to validate KubeRay + Kueue on kind.
+apiVersion: ray.io/v1
+kind: RayJob
+metadata:
+  name: ray-cpu-smoke
+  namespace: training
+  labels:
+    kueue.x-k8s.io/queue-name: research
+spec:
+  entrypoint: >-
+    python -c "import ray; ray.init();
+    print('cluster resources:', ray.cluster_resources());
+    sq = ray.remote(lambda x: x * x);
+    print('sum of squares:', sum(ray.get([sq.remote(i) for i in range(100)])))"
+  shutdownAfterJobFinishes: true
+  ttlSecondsAfterFinished: 300
+  rayClusterSpec:
+    headGroupSpec:
+      rayStartParams: {dashboard-host: "0.0.0.0"}
+      template:
+        spec:
+          containers:
+            - name: ray-head
+              image: RAY_IMAGE
+              resources:
+                requests: {cpu: 500m, memory: 1Gi}
+                limits: {memory: 2Gi}
+    workerGroupSpecs:
+      - groupName: cpu
+        replicas: 1
+        minReplicas: 1
+        maxReplicas: 1
+        rayStartParams: {}
+        template:
+          spec:
+            containers:
+              - name: ray-worker
+                image: RAY_IMAGE
+                resources:
+                  requests: {cpu: 500m, memory: 1Gi}
+                  limits: {memory: 2Gi}

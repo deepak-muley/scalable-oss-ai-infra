@@ -1,0 +1,37 @@
+# Smallest useful stack: one small model on one GPU, with LMCache offloading
+# KV to CPU RAM. Great for learning the moving parts on a single 8–16 GB GPU.
+servingEngineSpec:
+  runtimeClassName: nvidia
+  labels:
+    ai.lab/inference-engine: vllm      # picked up by platform/06-monitoring PodMonitor
+  modelSpec:
+    - name: qwen-small
+      repository: lmcache/vllm-openai   # vLLM image with LMCache built in
+      tag: latest                       # pin for reproducibility
+      modelURL: Qwen/Qwen2.5-1.5B-Instruct
+      replicaCount: 1
+      requestCPU: 4
+      requestMemory: 24Gi
+      requestGPU: 1
+      pvcStorage: 20Gi                  # per-model cache PVC created by the chart
+      pvcAccessMode: [ReadWriteMany]
+      storageClass: nfs-client
+      vllmConfig:
+        enablePrefixCaching: true
+        maxModelLen: 8192
+        dtype: bfloat16
+        extraArgs: ["--disable-log-requests", "--gpu-memory-utilization", "0.85"]
+      lmcacheConfig:
+        enabled: true
+        cpuOffloadingBufferSize: "10"    # GB of CPU RAM for KV offload
+      hf_token:
+        secretName: hf-token
+        secretKey: token
+
+routerSpec:
+  replicaCount: 1
+  routingLogic: roundrobin              # try: session, prefixaware
+  sessionKey: x-user-id
+  resources:
+    requests: {cpu: 500m, memory: 1Gi}
+    limits: {memory: 2Gi}

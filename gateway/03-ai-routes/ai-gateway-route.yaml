@@ -1,0 +1,63 @@
+# Clients call   POST http://<gateway-ip>/v1/chat/completions  {"model": "..."}
+# The AI gateway extracts "model" into header x-ai-eg-model; rules match it.
+apiVersion: aigateway.envoyproxy.io/v1alpha1
+kind: AIGatewayRoute
+metadata:
+  name: lab-models
+  namespace: ai-gateway
+spec:
+  parentRefs:
+    - name: ai-gateway
+      kind: Gateway
+      group: gateway.networking.k8s.io
+  rules:
+    # --- models served by the production stack (edit to match values-*.yaml)
+    - matches:
+        - headers:
+            - {type: Exact, name: x-ai-eg-model, value: Qwen/Qwen2.5-1.5B-Instruct}
+      backendRefs:
+        - name: vllm-stack
+      timeouts:
+        request: 600s          # long generations / reasoning models
+    - matches:
+        - headers:
+            - {type: Exact, name: x-ai-eg-model, value: meta-llama/Llama-3.1-8B-Instruct}
+      backendRefs:
+        - name: vllm-stack
+      timeouts:
+        request: 600s
+    - matches:
+        - headers:
+            - {type: Exact, name: x-ai-eg-model, value: BAAI/bge-m3}
+      backendRefs:
+        - name: vllm-stack
+
+    # --- a stable public alias: clients ask for "lab-chat", we decide which
+    #     real model serves it (swap models without touching clients).
+    - matches:
+        - headers:
+            - {type: Exact, name: x-ai-eg-model, value: lab-chat}
+      backendRefs:
+        - name: vllm-stack
+          modelNameOverride: Qwen/Qwen2.5-1.5B-Instruct
+      timeouts:
+        request: 600s
+
+    # --- single raw vLLM deployment (inference/02 or 03)
+    - matches:
+        - headers:
+            - {type: Exact, name: x-ai-eg-model, value: Qwen/Qwen2.5-7B-Instruct}
+      backendRefs:
+        - name: vllm-basic
+      timeouts:
+        request: 600s
+
+  # Expose token counts as Envoy dynamic metadata (used by rate limiting
+  # and access logs / metrics).
+  llmRequestCosts:
+    - metadataKey: llm_input_token
+      type: InputToken
+    - metadataKey: llm_output_token
+      type: OutputToken
+    - metadataKey: llm_total_token
+      type: TotalToken

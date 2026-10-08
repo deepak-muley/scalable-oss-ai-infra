@@ -1,0 +1,47 @@
+# Gateway backends/routes for the simulated models. Reuses the real
+# gateway/03-ai-routes/gateway.yaml + security-policy.yaml.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: Backend
+metadata: {name: sim-qwen-small, namespace: ai-gateway}
+spec:
+  endpoints:
+    - fqdn: {hostname: sim-qwen-small.llm-serving.svc.cluster.local, port: 8000}
+---
+apiVersion: aigateway.envoyproxy.io/v1alpha1
+kind: AIServiceBackend
+metadata: {name: sim-qwen-small, namespace: ai-gateway}
+spec:
+  schema: {name: OpenAI}
+  backendRef: {name: sim-qwen-small, kind: Backend, group: gateway.envoyproxy.io}
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: Backend
+metadata: {name: sim-llama8b, namespace: ai-gateway}
+spec:
+  endpoints:
+    - fqdn: {hostname: sim-llama8b.llm-serving.svc.cluster.local, port: 8000}
+---
+apiVersion: aigateway.envoyproxy.io/v1alpha1
+kind: AIServiceBackend
+metadata: {name: sim-llama8b, namespace: ai-gateway}
+spec:
+  schema: {name: OpenAI}
+  backendRef: {name: sim-llama8b, kind: Backend, group: gateway.envoyproxy.io}
+---
+apiVersion: aigateway.envoyproxy.io/v1alpha1
+kind: AIGatewayRoute
+metadata: {name: sim-models, namespace: ai-gateway}
+spec:
+  parentRefs:
+    - {name: ai-gateway, kind: Gateway, group: gateway.networking.k8s.io}
+  rules:
+    - matches: [{headers: [{type: Exact, name: x-ai-eg-model, value: Qwen/Qwen2.5-1.5B-Instruct}]}]
+      backendRefs: [{name: sim-qwen-small}]
+    - matches: [{headers: [{type: Exact, name: x-ai-eg-model, value: meta-llama/Llama-3.1-8B-Instruct}]}]
+      backendRefs: [{name: sim-llama8b}]
+    - matches: [{headers: [{type: Exact, name: x-ai-eg-model, value: lab-chat}]}]
+      backendRefs:
+        - name: sim-qwen-small
+          modelNameOverride: Qwen/Qwen2.5-1.5B-Instruct
+  llmRequestCosts:
+    - {metadataKey: llm_total_token, type: TotalToken}

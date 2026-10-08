@@ -1,0 +1,29 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: bench-random
+  namespace: evaluation
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: bench
+          image: vllm/vllm-openai:v0.10.2
+          command: ["vllm", "bench", "serve"]
+          args:
+            - --backend=openai-chat
+            - --base-url=http://vllm-router-service.llm-serving.svc.cluster.local   # or vllm-qwen-7b:8000
+            - --endpoint=/v1/chat/completions
+            - --model=Qwen/Qwen2.5-1.5B-Instruct
+            - --dataset-name=random
+            - --random-input-len=1024
+            - --random-output-len=256
+            - --num-prompts=400
+            - --max-concurrency=32
+          env:
+            - name: HF_TOKEN       # tokenizer download for gated models
+              valueFrom: {secretKeyRef: {name: hf-token, key: token, optional: true}}
+          resources:
+            requests: {cpu: "2", memory: 4Gi}

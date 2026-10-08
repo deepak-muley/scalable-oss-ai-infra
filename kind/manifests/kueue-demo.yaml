@@ -1,0 +1,49 @@
+# Kueue quota + preemption demo on fake GPUs (training-cq quota = 4 GPUs,
+# may borrow 2 from batch-inference-cq through the cohort).
+#  1. low-a (4 GPUs)  -> admitted
+#  2. low-b (4 GPUs)  -> pending (4 used, only 2 borrowable)
+#  3. high-c (4 GPUs) -> preempts low-a, gets admitted
+# Watch:  kubectl get workloads -n training -w
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: low-a
+  namespace: training
+  labels:
+    kueue.x-k8s.io/queue-name: research
+    kueue.x-k8s.io/priority-class: low
+spec:
+  parallelism: 2
+  completions: 2
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: work
+          image: busybox:1.36
+          command: ["sh", "-c", "echo training on fake GPUs; sleep 600"]
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {nvidia.com/gpu: 2}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: low-b
+  namespace: training
+  labels:
+    kueue.x-k8s.io/queue-name: research
+    kueue.x-k8s.io/priority-class: low
+spec:
+  parallelism: 2
+  completions: 2
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: work
+          image: busybox:1.36
+          command: ["sh", "-c", "sleep 600"]
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {nvidia.com/gpu: 2}

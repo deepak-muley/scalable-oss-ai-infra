@@ -1,0 +1,36 @@
+# Autoscale the raw vLLM deployment (inference/02 or 03) on queue depth.
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: vllm-qwen-7b
+  namespace: llm-serving
+spec:
+  scaleTargetRef:
+    name: vllm-qwen-7b
+  minReplicaCount: 1
+  maxReplicaCount: 4
+  pollingInterval: 15
+  cooldownPeriod: 600            # GPUs are expensive to churn
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleUp:
+          stabilizationWindowSeconds: 30
+          policies: [{type: Pods, value: 1, periodSeconds: 120}]
+        scaleDown:
+          stabilizationWindowSeconds: 600
+          policies: [{type: Pods, value: 1, periodSeconds: 300}]
+  triggers:
+    # queue depth averaged per replica (KEDA divides by replica count for AverageValue)
+    - type: prometheus
+      metricType: AverageValue
+      metadata:
+        serverAddress: http://kps-prometheus.monitoring.svc:9090
+        query: sum(vllm:num_requests_waiting{namespace="llm-serving", pod=~"vllm-qwen-7b-.*"})
+        threshold: "5"
+    # KV cache pressure (max across replicas). Rename metric for newer vLLM.
+    - type: prometheus
+      metadata:
+        serverAddress: http://kps-prometheus.monitoring.svc:9090
+        query: max(vllm:gpu_cache_usage_perc{namespace="llm-serving", pod=~"vllm-qwen-7b-.*"})
+        threshold: "0.85"

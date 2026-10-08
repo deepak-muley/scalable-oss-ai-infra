@@ -1,0 +1,30 @@
+# Every prompt starts with the same 4000 random tokens (think: a long system
+# prompt or RAG document) followed by 256 unique tokens.
+# Compare TTFT with prefix caching / LMCache / prefixaware routing on vs off.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: bench-shared-prefix
+  namespace: evaluation
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: bench
+          image: vllm/vllm-openai:v0.10.2
+          command: ["vllm", "bench", "serve"]
+          args:
+            - --backend=openai-chat
+            - --base-url=http://vllm-router-service.llm-serving.svc.cluster.local
+            - --endpoint=/v1/chat/completions
+            - --model=Qwen/Qwen2.5-1.5B-Instruct
+            - --dataset-name=random
+            - --random-prefix-len=4000
+            - --random-input-len=256
+            - --random-output-len=128
+            - --num-prompts=300
+            - --max-concurrency=16
+          resources:
+            requests: {cpu: "2", memory: 4Gi}

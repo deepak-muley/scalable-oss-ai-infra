@@ -1,0 +1,78 @@
+# Burst / fallback to an external OpenAI-compatible provider. Clients keep
+# calling the lab gateway; the provider key lives only in this Secret.
+#
+# NOTE: BackendSecurityPolicy wiring changed across AI Gateway releases
+# (backendSecurityPolicyRef on AIServiceBackend in older versions vs
+# targetRefs on the policy in newer ones). Check
+# `kubectl explain backendsecuritypolicy.spec` for your version.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: external-llm-apikey
+  namespace: ai-gateway
+type: Opaque
+stringData:
+  apiKey: "REPLACE_ME"
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: Backend
+metadata:
+  name: external-openai
+  namespace: ai-gateway
+spec:
+  endpoints:
+    - fqdn:
+        hostname: api.openai.com
+        port: 443
+---
+apiVersion: gateway.networking.k8s.io/v1alpha3
+kind: BackendTLSPolicy
+metadata:
+  name: external-openai-tls
+  namespace: ai-gateway
+spec:
+  targetRefs:
+    - group: gateway.envoyproxy.io
+      kind: Backend
+      name: external-openai
+  validation:
+    wellKnownCACertificates: System
+    hostname: api.openai.com
+---
+apiVersion: aigateway.envoyproxy.io/v1alpha1
+kind: AIServiceBackend
+metadata:
+  name: external-openai
+  namespace: ai-gateway
+spec:
+  schema:
+    name: OpenAI
+  backendRef:
+    name: external-openai
+    kind: Backend
+    group: gateway.envoyproxy.io
+---
+apiVersion: aigateway.envoyproxy.io/v1alpha1
+kind: BackendSecurityPolicy
+metadata:
+  name: external-openai-apikey
+  namespace: ai-gateway
+spec:
+  targetRefs:
+    - group: aigateway.envoyproxy.io
+      kind: AIServiceBackend
+      name: external-openai
+  type: APIKey
+  apiKey:
+    secretRef:
+      name: external-llm-apikey
+      namespace: ai-gateway
+# Then add a rule to ai-gateway-route.yaml, e.g. fallback by priority:
+#    - matches: [{headers: [{type: Exact, name: x-ai-eg-model, value: lab-chat}]}]
+#      backendRefs:
+#        - name: vllm-stack
+#          modelNameOverride: Qwen/Qwen2.5-1.5B-Instruct
+#          priority: 0            # primary
+#        - name: external-openai
+#          modelNameOverride: gpt-4o-mini
+#          priority: 1            # used when the lab backend is unhealthy

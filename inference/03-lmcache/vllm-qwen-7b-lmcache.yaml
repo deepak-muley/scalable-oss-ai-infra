@@ -1,0 +1,62 @@
+# Same service name as 02-vllm-basic (vllm-qwen-7b) so the gateway route keeps
+# working — this REPLACES the basic deployment with an LMCache-enabled one.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-qwen-7b
+  namespace: llm-serving
+  labels: {app: vllm-qwen-7b}
+spec:
+  replicas: 2
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app: vllm-qwen-7b}
+  template:
+    metadata:
+      labels:
+        app: vllm-qwen-7b
+        ai.lab/inference-engine: vllm
+    spec:
+      runtimeClassName: nvidia
+      containers:
+        - name: vllm
+          image: lmcache/vllm-openai:latest   # vLLM + LMCache preinstalled; pin a tag
+          command: ["vllm", "serve"]
+          args:
+            - Qwen/Qwen2.5-7B-Instruct
+            - --host=0.0.0.0
+            - --port=8000
+            - --gpu-memory-utilization=0.90
+            - --max-model-len=32768
+            - --enable-prefix-caching
+            - --disable-log-requests
+            - --kv-transfer-config
+            - '{"kv_connector":"LMCacheConnectorV1","kv_role":"kv_both"}'
+          env:
+            - {name: HF_HOME, value: /models/hf}
+            - {name: LMCACHE_CONFIG_FILE, value: /etc/lmcache/lmcache.yaml}
+            - {name: LMCACHE_USE_EXPERIMENTAL, value: "True"}
+            - name: HF_TOKEN
+              valueFrom: {secretKeyRef: {name: hf-token, key: token, optional: true}}
+          ports: [{name: http, containerPort: 8000}]
+          startupProbe:
+            httpGet: {path: /health, port: 8000}
+            periodSeconds: 10
+            failureThreshold: 90
+          readinessProbe:
+            httpGet: {path: /health, port: 8000}
+            periodSeconds: 5
+          resources:
+            requests: {cpu: "6", memory: 48Gi}        # + max_local_cpu_size of pinned RAM
+            limits: {nvidia.com/gpu: 1, memory: 64Gi}
+          volumeMounts:
+            - {name: models, mountPath: /models}
+            - {name: shm, mountPath: /dev/shm}
+            - {name: lmcache-config, mountPath: /etc/lmcache}
+      volumes:
+        - name: models
+          persistentVolumeClaim: {claimName: model-cache}
+        - name: shm
+          emptyDir: {medium: Memory, sizeLimit: 8Gi}
+        - name: lmcache-config
+          configMap: {name: lmcache-config}

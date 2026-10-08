@@ -1,0 +1,95 @@
+# --- Hardware flavors -------------------------------------------------------
+# One flavor per GPU model in your lab. nodeLabels come from GPU Feature
+# Discovery:  kubectl get nodes -L nvidia.com/gpu.product
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: ResourceFlavor
+metadata:
+  name: gpu-default
+spec:
+  nodeLabels:
+    nvidia.com/gpu.present: "true"
+# Example of a specific flavor:
+# ---
+# apiVersion: kueue.x-k8s.io/v1beta1
+# kind: ResourceFlavor
+# metadata: {name: h100}
+# spec:
+#   nodeLabels: {nvidia.com/gpu.product: NVIDIA-H100-80GB-HBM3}
+---
+# --- Priorities --------------------------------------------------------------
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: WorkloadPriorityClass
+metadata:
+  name: high
+value: 1000
+description: "interactive / deadline jobs; may preempt low"
+---
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: WorkloadPriorityClass
+metadata:
+  name: low
+value: 100
+description: "best-effort batch (sweeps, offline batch inference)"
+---
+# --- ClusterQueues (one cohort => they can borrow idle GPUs) -----------------
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: ClusterQueue
+metadata:
+  name: training-cq
+spec:
+  cohort: ai-lab
+  namespaceSelector: {}
+  queueingStrategy: BestEffortFIFO
+  preemption:
+    reclaimWithinCohort: Any
+    withinClusterQueue: LowerPriority
+  resourceGroups:
+    - coveredResources: ["cpu", "memory", "nvidia.com/gpu"]
+      flavors:
+        - name: gpu-default
+          resources:
+            - name: cpu
+              nominalQuota: 64
+            - name: memory
+              nominalQuota: 512Gi
+            - name: nvidia.com/gpu
+              nominalQuota: 4          # EDIT: GPUs reserved for training
+---
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: ClusterQueue
+metadata:
+  name: batch-inference-cq
+spec:
+  cohort: ai-lab
+  namespaceSelector: {}
+  preemption:
+    reclaimWithinCohort: Any
+    withinClusterQueue: LowerPriority
+  resourceGroups:
+    - coveredResources: ["cpu", "memory", "nvidia.com/gpu"]
+      flavors:
+        - name: gpu-default
+          resources:
+            - name: cpu
+              nominalQuota: 32
+            - name: memory
+              nominalQuota: 256Gi
+            - name: nvidia.com/gpu
+              nominalQuota: 2          # EDIT
+---
+# --- LocalQueues: what users reference via label kueue.x-k8s.io/queue-name ---
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: LocalQueue
+metadata:
+  name: research
+  namespace: training
+spec:
+  clusterQueue: training-cq
+---
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: LocalQueue
+metadata:
+  name: batch
+  namespace: evaluation
+spec:
+  clusterQueue: batch-inference-cq

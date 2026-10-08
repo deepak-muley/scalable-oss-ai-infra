@@ -1,0 +1,25 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-kueue-queue
+  annotations:
+    policies.kyverno.io/description: Batch/training workloads must be submitted to a Kueue LocalQueue.
+spec:
+  validationFailureAction: Audit
+  background: true
+  rules:
+    - name: queue-label
+      match:
+        any:
+          - resources:
+              kinds:
+                - batch/v1/Job
+                - trainer.kubeflow.org/v1alpha1/TrainJob
+                - ray.io/v1/RayJob
+              namespaces: [training, evaluation]
+      validate:
+        message: "Add label kueue.x-k8s.io/queue-name (e.g. research) so Kueue can schedule this GPU workload."
+        pattern:
+          metadata:
+            labels:
+              kueue.x-k8s.io/queue-name: "?*"

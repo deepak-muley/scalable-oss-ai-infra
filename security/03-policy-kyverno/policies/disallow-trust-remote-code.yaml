@@ -1,0 +1,26 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: disallow-trust-remote-code
+  annotations:
+    policies.kyverno.io/description: >-
+      --trust-remote-code runs arbitrary Python shipped with a model repo.
+      Allow only via an explicit, reviewed exception.
+spec:
+  validationFailureAction: Audit
+  background: true
+  rules:
+    - name: no-trust-remote-code
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [llm-serving, training, evaluation]
+      validate:
+        message: "--trust-remote-code is not allowed; vet the model code and request a PolicyException."
+        deny:
+          conditions:
+            any:
+              - key: "{{ request.object.spec.containers[].args[] || `[]` }}"
+                operator: AnyIn
+                value: ["--trust-remote-code", "--trust-remote-code=true", "--trust_remote_code"]

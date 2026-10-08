@@ -1,0 +1,39 @@
+# Client authentication with static API keys.
+#   key in Secret = client id,  value = the API key the client sends.
+# Clients send:  x-api-key: <key>
+# (OpenAI SDK: OpenAI(base_url=..., api_key="unused",
+#              default_headers={"x-api-key": "<key>"}) )
+#
+# For real multi-tenant use switch to OIDC/JWT (SecurityPolicy.jwt) backed
+# by Keycloak/Dex, and use the JWT "sub" claim for per-user rate limiting.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ai-gateway-api-keys
+  namespace: ai-gateway
+type: Opaque
+stringData:
+  alice: sk-lab-alice-change-me
+  bob: sk-lab-bob-change-me
+  eval-bot: sk-lab-eval-change-me
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: SecurityPolicy
+metadata:
+  name: api-key-auth
+  namespace: ai-gateway
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: ai-gateway
+  apiKeyAuth:
+    credentialRefs:
+      - group: ""
+        kind: Secret
+        name: ai-gateway-api-keys
+    extractFrom:
+      - headers: ["x-api-key"]
+    # Newer Envoy Gateway releases can forward the matched client id
+    # upstream, which the rate limit policy can key on:
+    # forwardClientIDHeader: x-user-id

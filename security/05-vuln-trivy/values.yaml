@@ -1,0 +1,10 @@
+trivy:
+  ignoreUnfixed: true
+  severity: CRITICAL,HIGH
+  timeout: "30m0s"           # huge CUDA images
+operator:
+  scanJobsConcurrentLimit: 2 # scans pull/unpack images: keep it gentle
+  scanJobTTL: 10m
+  sbomGenerationEnabled: true
+serviceMonitor:
+  enabled: true

@@ -1,0 +1,28 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lmcache-server
+  namespace: llm-serving
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: lmcache-server}}
+  template:
+    metadata: {labels: {app: lmcache-server}}
+    spec:
+      containers:
+        - name: server
+          image: lmcache/vllm-openai:latest      # pin a tag for reproducibility
+          command: ["lmcache_server", "0.0.0.0", "65432"]
+          ports: [{containerPort: 65432}]
+          resources:
+            requests: {cpu: "2", memory: 32Gi}
+            limits: {memory: 64Gi}               # this is your shared KV capacity
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: lmcache-server
+  namespace: llm-serving
+spec:
+  selector: {app: lmcache-server}
+  ports: [{port: 65432, targetPort: 65432}]

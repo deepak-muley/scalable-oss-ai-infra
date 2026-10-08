@@ -1,0 +1,17 @@
+# Scrapes every vLLM engine pod in the lab. Our manifests and the
+# production-stack values add the label ai.lab/inference-engine=vllm.
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: vllm-engines
+  namespace: monitoring
+spec:
+  namespaceSelector:
+    matchNames: [llm-serving]
+  selector:
+    matchLabels:
+      ai.lab/inference-engine: vllm
+  podMetricsEndpoints:
+    - targetPort: 8000
+      path: /metrics
+      interval: 10s

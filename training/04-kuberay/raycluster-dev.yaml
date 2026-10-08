@@ -1,0 +1,49 @@
+# Interactive Ray cluster for experimentation (notebooks, `ray job submit`).
+# Autoscaler adds GPU workers on demand (0..2) and removes them when idle.
+apiVersion: ray.io/v1
+kind: RayCluster
+metadata:
+  name: ray-dev
+  namespace: training
+spec:
+  enableInTreeAutoscaling: true
+  autoscalerOptions:
+    idleTimeoutSeconds: 300
+  headGroupSpec:
+    rayStartParams:
+      dashboard-host: "0.0.0.0"
+      num-gpus: "0"
+    template:
+      spec:
+        containers:
+          - name: ray-head
+            image: rayproject/ray-llm:2.46.0-py311-cu124   # ships torch + vllm
+            envFrom: [{secretRef: {name: minio-creds, optional: true}}]
+            env:
+              - {name: MLFLOW_TRACKING_URI, value: http://mlflow.mlops.svc.cluster.local}
+            ports:
+              - {containerPort: 6379, name: gcs}
+              - {containerPort: 8265, name: dashboard}
+              - {containerPort: 10001, name: client}
+            resources:
+              requests: {cpu: "2", memory: 8Gi}
+              limits: {memory: 8Gi}
+  workerGroupSpecs:
+    - groupName: gpu
+      replicas: 0
+      minReplicas: 0
+      maxReplicas: 2
+      rayStartParams: {}
+      template:
+        spec:
+          runtimeClassName: nvidia
+          containers:
+            - name: ray-worker
+              image: rayproject/ray-llm:2.46.0-py311-cu124
+              envFrom: [{secretRef: {name: minio-creds, optional: true}}]
+              resources:
+                requests: {cpu: "4", memory: 32Gi}
+                limits: {nvidia.com/gpu: 1, memory: 32Gi}
+              volumeMounts: [{name: shm, mountPath: /dev/shm}]
+          volumes:
+            - {name: shm, emptyDir: {medium: Memory, sizeLimit: 8Gi}}

@@ -1,0 +1,22 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: restrict-image-registries
+spec:
+  validationFailureAction: Audit
+  background: true
+  rules:
+    - name: vetted-registries
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [llm-serving]
+      validate:
+        message: "Model-serving images must come from vetted registries/orgs."
+        pattern:
+          spec:
+            =(initContainers):
+              - image: "vllm/* | docker.io/vllm/* | lmcache/* | docker.io/lmcache/* | amazon/aws-cli* | python:*"
+            containers:
+              - image: "vllm/* | docker.io/vllm/* | lmcache/* | docker.io/lmcache/* | ghcr.io/llm-d/* | rayproject/* | registry.k8s.io/* | valkey/* | python:* | ghcr.io/YOUR_ORG/*"

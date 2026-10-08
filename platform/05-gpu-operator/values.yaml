@@ -1,0 +1,26 @@
+# Full reference: helm show values nvidia/gpu-operator
+driver:
+  enabled: false          # overridden by install.sh; false = use host driver
+toolkit:
+  enabled: true           # configures containerd + creates RuntimeClass "nvidia"
+devicePlugin:
+  enabled: true
+mig:
+  strategy: single        # "single": MIG slices appear as nvidia.com/gpu
+                          # "mixed": appear as nvidia.com/mig-1g.10gb etc.
+migManager:
+  enabled: true
+dcgmExporter:
+  enabled: true
+  serviceMonitor:
+    enabled: true         # scraped by kube-prometheus-stack (platform/06-monitoring)
+    interval: 15s
+gfd:
+  enabled: true
+nfd:
+  enabled: true           # set false if NFD is already installed cluster-wide
+# Uncomment if you have InfiniBand/RoCE + NVIDIA Network Operator for
+# multi-node training (GPUDirect RDMA):
+# driver:
+#   rdma:
+#     enabled: true

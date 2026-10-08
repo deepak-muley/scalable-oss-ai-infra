@@ -1,0 +1,50 @@
+# Pool members: plain vLLM pods. The EPP finds them via label app=vllm-qwen-pool
+# and reads their /metrics to pick an endpoint per request.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-qwen-pool
+  namespace: llm-serving
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: vllm-qwen-pool}
+  template:
+    metadata:
+      labels:
+        app: vllm-qwen-pool
+        ai.lab/inference-engine: vllm
+    spec:
+      containers:
+        - name: vllm
+          image: vllm/vllm-openai:v0.10.2
+          command: ["vllm", "serve"]
+          args:
+            - Qwen/Qwen3-8B
+            - --port=8000
+            - --enable-prefix-caching
+            - --max-model-len=16384
+            - --gpu-memory-utilization=0.90
+          env:
+            - {name: HF_HOME, value: /models/hf}
+            - name: HF_TOKEN
+              valueFrom: {secretKeyRef: {name: hf-token, key: token, optional: true}}
+          ports: [{name: http, containerPort: 8000}]
+          readinessProbe:
+            httpGet: {path: /health, port: 8000}
+            periodSeconds: 5
+          startupProbe:
+            httpGet: {path: /health, port: 8000}
+            periodSeconds: 10
+            failureThreshold: 90
+          resources:
+            limits: {nvidia.com/gpu: 1}
+            requests: {cpu: "4", memory: 32Gi}
+          volumeMounts:
+            - {name: models, mountPath: /models}
+            - {name: shm, mountPath: /dev/shm}
+      volumes:
+        - name: models
+          persistentVolumeClaim: {claimName: model-cache}
+        - name: shm
+          emptyDir: {medium: Memory, sizeLimit: 8Gi}

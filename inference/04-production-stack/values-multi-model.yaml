@@ -1,0 +1,76 @@
+# Multi-model stack: different model *types* behind one router.
+servingEngineSpec:
+  runtimeClassName: nvidia
+  labels:
+    ai.lab/inference-engine: vllm
+  modelSpec:
+    # --- Chat / instruction model, 2 replicas for throughput -------------
+    - name: llama8b
+      repository: lmcache/vllm-openai
+      tag: latest
+      modelURL: meta-llama/Llama-3.1-8B-Instruct     # gated: accept licence on HF
+      replicaCount: 2
+      requestCPU: 8
+      requestMemory: 48Gi
+      requestGPU: 1
+      pvcStorage: 50Gi
+      pvcAccessMode: [ReadWriteMany]
+      storageClass: nfs-client
+      vllmConfig:
+        enablePrefixCaching: true
+        enableChunkedPrefill: true
+        maxModelLen: 32768
+        dtype: bfloat16
+        extraArgs: ["--disable-log-requests", "--gpu-memory-utilization", "0.90"]
+      lmcacheConfig:
+        enabled: true
+        cpuOffloadingBufferSize: "30"
+      hf_token: {secretName: hf-token, secretKey: token}
+
+    # --- Embedding model (RAG): /v1/embeddings -----------------------------
+    # vLLM auto-detects encoder/pooling models; on older vLLM add
+    # "--task", "embed"  (newer: "--runner", "pooling").
+    - name: bge-m3
+      repository: vllm/vllm-openai
+      tag: v0.10.2
+      modelURL: BAAI/bge-m3
+      replicaCount: 1
+      requestCPU: 4
+      requestMemory: 16Gi
+      requestGPU: 1
+      pvcStorage: 10Gi
+      pvcAccessMode: [ReadWriteMany]
+      storageClass: nfs-client
+      vllmConfig:
+        maxModelLen: 8192
+        extraArgs: ["--disable-log-requests", "--gpu-memory-utilization", "0.40"]
+      hf_token: {secretName: hf-token, secretKey: token}
+
+    # --- Small fast model (classification, routing, drafts) ----------------
+    - name: qwen-small
+      repository: lmcache/vllm-openai
+      tag: latest
+      modelURL: Qwen/Qwen2.5-1.5B-Instruct
+      replicaCount: 1
+      requestCPU: 4
+      requestMemory: 24Gi
+      requestGPU: 1
+      pvcStorage: 20Gi
+      pvcAccessMode: [ReadWriteMany]
+      storageClass: nfs-client
+      vllmConfig:
+        enablePrefixCaching: true
+        maxModelLen: 8192
+        extraArgs: ["--disable-log-requests", "--gpu-memory-utilization", "0.85"]
+      lmcacheConfig:
+        enabled: true
+        cpuOffloadingBufferSize: "10"
+      hf_token: {secretName: hf-token, secretKey: token}
+
+routerSpec:
+  replicaCount: 2
+  routingLogic: prefixaware
+  sessionKey: x-user-id
+  resources:
+    requests: {cpu: "1", memory: 2Gi}
+    limits: {memory: 4Gi}

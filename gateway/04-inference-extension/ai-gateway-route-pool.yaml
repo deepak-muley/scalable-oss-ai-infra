@@ -1,0 +1,23 @@
+# Route model "Qwen/Qwen3-8B" to the InferencePool; Envoy asks the EPP which
+# pod should serve each request.
+apiVersion: aigateway.envoyproxy.io/v1alpha1
+kind: AIGatewayRoute
+metadata:
+  name: qwen-pool
+  namespace: llm-serving
+spec:
+  parentRefs:
+    - name: ai-gateway
+      namespace: ai-gateway
+      kind: Gateway
+      group: gateway.networking.k8s.io
+  rules:
+    - matches:
+        - headers:
+            - {type: Exact, name: x-ai-eg-model, value: Qwen/Qwen3-8B}
+      backendRefs:
+        - group: inference.networking.k8s.io
+          kind: InferencePool
+          name: vllm-qwen-pool
+      timeouts:
+        request: 600s

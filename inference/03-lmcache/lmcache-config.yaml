@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lmcache-config
+  namespace: llm-serving
+data:
+  lmcache.yaml: |
+    chunk_size: 256                 # tokens per KV chunk (hash unit)
+    local_cpu: true
+    max_local_cpu_size: 20          # GB of pinned host RAM per pod
+    # local_disk: "file:///lmcache-disk/"
+    # max_local_disk_size: 200      # GB on local NVMe
+    remote_url: "lm://lmcache-server.llm-serving.svc.cluster.local:65432"
+    # remote_url: "redis://valkey.llm-serving.svc.cluster.local:6379"
+    remote_serde: "naive"

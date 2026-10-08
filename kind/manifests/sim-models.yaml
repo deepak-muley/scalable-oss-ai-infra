@@ -1,0 +1,78 @@
+# Simulated "vLLM" servers (llm-d-inference-sim): OpenAI-compatible API +
+# vLLM-style Prometheus metrics (vllm:num_requests_waiting, ...), no GPU.
+# Each pod still REQUESTS a fake nvidia.com/gpu so scheduling, quotas and
+# contention with training jobs behave like the real lab.
+# Latency flags make queues build up under load so KEDA has something to do.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sim-qwen-small
+  namespace: llm-serving
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: sim-qwen-small}}
+  template:
+    metadata:
+      labels: {app: sim-qwen-small, ai.lab/inference-engine: vllm}
+    spec:
+      containers:
+        - name: sim
+          image: SIM_IMAGE
+          args:
+            - --model=Qwen/Qwen2.5-1.5B-Instruct
+            - --port=8000
+            - --mode=random
+            - --time-to-first-token=100
+            - --inter-token-latency=20
+            - --max-num-seqs=8
+          ports: [{name: http, containerPort: 8000}]
+          readinessProbe: {tcpSocket: {port: 8000}, periodSeconds: 5}
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {nvidia.com/gpu: 1, memory: 256Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sim-qwen-small
+  namespace: llm-serving
+spec:
+  selector: {app: sim-qwen-small}
+  ports: [{name: http, port: 8000, targetPort: 8000}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sim-llama8b
+  namespace: llm-serving
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: sim-llama8b}}
+  template:
+    metadata:
+      labels: {app: sim-llama8b, ai.lab/inference-engine: vllm}
+    spec:
+      containers:
+        - name: sim
+          image: SIM_IMAGE
+          args:
+            - --model=meta-llama/Llama-3.1-8B-Instruct
+            - --port=8000
+            - --mode=random
+            - --time-to-first-token=300
+            - --inter-token-latency=50
+            - --max-num-seqs=2          # tiny batch => queue builds fast
+          ports: [{name: http, containerPort: 8000}]
+          readinessProbe: {tcpSocket: {port: 8000}, periodSeconds: 5}
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {nvidia.com/gpu: 1, memory: 256Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sim-llama8b
+  namespace: llm-serving
+spec:
+  selector: {app: sim-llama8b}
+  ports: [{name: http, port: 8000, targetPort: 8000}]

@@ -1,0 +1,77 @@
+# Offline batch inference: Ray Data streams prompts through vLLM engines on
+# GPU workers. This is how labs generate synthetic data, run big evals, or
+# label datasets — throughput-optimised, no HTTP serving in the loop.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ray-batch-infer-script
+  namespace: training
+data:
+  batch.py: |
+    import ray
+    from ray.data.llm import vLLMEngineProcessorConfig, build_llm_processor
+
+    config = vLLMEngineProcessorConfig(
+        model_source="Qwen/Qwen2.5-1.5B-Instruct",
+        engine_kwargs={"max_model_len": 4096, "enable_prefix_caching": True},
+        concurrency=1,          # number of vLLM engine replicas (= GPUs here)
+        batch_size=64,
+    )
+    processor = build_llm_processor(
+        config,
+        preprocess=lambda row: dict(
+            messages=[{"role": "system", "content": "Answer in one sentence."},
+                      {"role": "user", "content": f"Give a fun fact about the number {row['id']}."}],
+            sampling_params=dict(temperature=0.7, max_tokens=64),
+        ),
+        postprocess=lambda row: dict(id=row["id"], answer=row["generated_text"]),
+    )
+    ds = processor(ray.data.range(500))
+    for r in ds.take(5):
+        print(r)
+    # ds.write_parquet("s3://datasets/synthetic/facts/")   # with minio-creds env
+---
+apiVersion: ray.io/v1
+kind: RayJob
+metadata:
+  name: ray-batch-inference
+  namespace: training
+  labels:
+    kueue.x-k8s.io/queue-name: research
+spec:
+  entrypoint: python /home/ray/jobs/batch.py
+  shutdownAfterJobFinishes: true
+  ttlSecondsAfterFinished: 600
+  rayClusterSpec:
+    headGroupSpec:
+      rayStartParams: {dashboard-host: "0.0.0.0", num-gpus: "0"}
+      template:
+        spec:
+          containers:
+            - name: ray-head
+              image: rayproject/ray-llm:2.46.0-py311-cu124
+              resources:
+                requests: {cpu: "2", memory: 8Gi}
+                limits: {memory: 8Gi}
+              volumeMounts: [{name: script, mountPath: /home/ray/jobs}]
+          volumes:
+            - {name: script, configMap: {name: ray-batch-infer-script}}
+    workerGroupSpecs:
+      - groupName: gpu
+        replicas: 1
+        minReplicas: 1
+        maxReplicas: 1
+        rayStartParams: {}
+        template:
+          spec:
+            runtimeClassName: nvidia
+            containers:
+              - name: ray-worker
+                image: rayproject/ray-llm:2.46.0-py311-cu124
+                envFrom: [{secretRef: {name: minio-creds, optional: true}}]
+                resources:
+                  requests: {cpu: "4", memory: 24Gi}
+                  limits: {nvidia.com/gpu: 1, memory: 32Gi}
+                volumeMounts: [{name: shm, mountPath: /dev/shm}]
+            volumes:
+              - {name: shm, emptyDir: {medium: Memory, sizeLimit: 8Gi}}

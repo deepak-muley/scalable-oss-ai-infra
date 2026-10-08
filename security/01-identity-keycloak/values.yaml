@@ -1,0 +1,22 @@
+command:
+  - /opt/keycloak/bin/kc.sh
+  - start-dev                # LAB ONLY: in-memory DB, http
+  - --http-port=8080
+  - --hostname-strict=false
+extraEnv: |
+  # Keycloak >= 26 bootstrap admin (older: KEYCLOAK_ADMIN / KEYCLOAK_ADMIN_PASSWORD)
+  - name: KC_BOOTSTRAP_ADMIN_USERNAME
+    value: admin
+  - name: KC_BOOTSTRAP_ADMIN_PASSWORD
+    value: admin             # CHANGE ME
+  - name: KEYCLOAK_ADMIN
+    value: admin
+  - name: KEYCLOAK_ADMIN_PASSWORD
+    value: admin
+  - name: KC_HEALTH_ENABLED
+    value: "true"
+database:
+  vendor: dev-file
+resources:
+  requests: {cpu: 500m, memory: 1Gi}
+  limits: {memory: 2Gi}

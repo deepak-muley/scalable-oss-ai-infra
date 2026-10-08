@@ -1,0 +1,17 @@
+# We intentionally keep the chart's default manager configuration: overriding
+# managerConfig.controllerManagerConfigYaml replaces the WHOLE config, and an
+# unknown framework name stops the controller from starting.
+#
+# To customise (e.g. enable gang-style waitForPodsReady or add the
+# trainer.kubeflow.org/trainjob / leaderworkerset integrations supported by
+# your Kueue release):
+#
+#   helm show values oci://registry.k8s.io/kueue/charts/kueue --version $KUEUE_VERSION \
+#     | yq '.managerConfig.controllerManagerConfigYaml' > config.yaml
+#   # edit config.yaml, e.g.:
+#   #   waitForPodsReady: {enable: true, timeout: 10m, blockAdmission: true}
+#   #   integrations.frameworks: [..., "trainer.kubeflow.org/trainjob"]
+#   # then paste it back under managerConfig.controllerManagerConfigYaml here.
+#
+# After changing: kubectl -n kueue-system rollout restart deploy/kueue-controller-manager
+{}

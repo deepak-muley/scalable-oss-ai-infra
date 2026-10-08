@@ -1,0 +1,18 @@
+# Overlay: a shared remote LMCache server so all engines of a model share KV,
+# plus KV-aware routing. Use with:  SHARED_KV=true VALUES=values-multi-model.yaml ./install.sh
+cacheserverSpec:
+  replicaCount: 1
+  containerPort: 8080
+  servicePort: 81
+  serde: naive
+  repository: lmcache/vllm-openai
+  tag: latest
+  resources:
+    requests: {cpu: "4", memory: 32Gi}
+    limits: {cpu: "8", memory: 64Gi}
+  labels:
+    environment: cacheserver
+    release: cacheserver
+
+routerSpec:
+  routingLogic: kvaware     # if unsupported by your chart version, use prefixaware

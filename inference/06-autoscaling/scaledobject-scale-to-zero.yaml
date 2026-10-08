@@ -1,0 +1,23 @@
+# Scale-to-zero for a rarely used model (e.g. the VLM) using a cron trigger:
+# up during lab hours, zero GPUs nights/weekends.
+# Request-driven wake-up (scale 0->1 on first request) needs something that
+# holds the request while the pod cold-starts — e.g. the KEDA HTTP add-on,
+# Knative/KServe, or the AI gateway falling back to another model meanwhile.
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: vllm-qwen-vl
+  namespace: llm-serving
+spec:
+  scaleTargetRef:
+    name: vllm-qwen-vl
+  minReplicaCount: 0
+  maxReplicaCount: 1
+  cooldownPeriod: 1800
+  triggers:
+    - type: cron
+      metadata:
+        timezone: America/Los_Angeles
+        start: 0 8 * * 1-5
+        end: 0 20 * * 1-5
+        desiredReplicas: "1"
