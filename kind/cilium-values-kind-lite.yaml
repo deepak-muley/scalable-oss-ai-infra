@@ -1,0 +1,23 @@
+# Cilium for the lite profile: no Hubble relay/UI (saves ~300 MB).
+kubeProxyReplacement: true
+ipam:
+  mode: kubernetes
+l2announcements:
+  enabled: true
+externalIPs:
+  enabled: true
+k8sClientRateLimit:
+  qps: 50
+  burst: 100
+gatewayAPI:
+  enabled: false
+hubble:
+  enabled: true        # flows via `cilium hubble port-forward` + hubble CLI still work
+  relay:
+    enabled: false
+  ui:
+    enabled: false
+operator:
+  replicas: 1
+  resources:
+    requests: {cpu: 50m, memory: 128Mi}

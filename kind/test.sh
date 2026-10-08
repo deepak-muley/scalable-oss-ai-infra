@@ -46,10 +46,12 @@ else
 fi
 kubectl delete job -n training low-a low-b high-c --ignore-not-found >/dev/null
 
+if [[ "${SKIP_RAY:-false}" != "true" ]]; then
 echo "--- KubeRay"
 sed "s|RAY_IMAGE|${RAY_IMAGE:-rayproject/ray:2.46.0-py311$( [[ $(uname -m) == arm64 ]] && echo -aarch64)}|g" \
   "${HERE}/manifests/rayjob-cpu.yaml" | kubectl apply -f - >/dev/null
 echo "RayJob submitted: kubectl get rayjob -n training -w   (image pull takes a few minutes)"
+fi
 
 if kubectl get scaledobject sim-llama8b -n llm-serving >/dev/null 2>&1; then
   echo "--- KEDA: generating load on Llama sim for 90s (max-num-seqs=2 => queue)"

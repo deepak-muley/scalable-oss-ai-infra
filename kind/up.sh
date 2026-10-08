@@ -3,6 +3,7 @@
 # Reuses the real component install.sh scripts, so this also tests them.
 #
 #   ./up.sh                         # default profile
+#   PROFILE=lite ./up.sh            # ~8 GB Docker: 3 nodes, no monitoring/Hubble UI/cert-manager
 #   WITH_MONITORING=false ./up.sh   # lighter (no Prometheus/Grafana, no KEDA demo)
 #   WITH_GIE=true ./up.sh           # + Gateway API Inference Extension demo
 #   WITH_TRAINER=true ./up.sh       # + Kubeflow Trainer
@@ -14,7 +15,18 @@ source "${ROOT}/scripts/lib.sh"
 require kind docker
 
 CLUSTER="${CLUSTER:-ai-lab}"
+PROFILE="${PROFILE:-full}"
+if [[ "${PROFILE}" == "lite" ]]; then
+  KIND_CONFIG="${KIND_CONFIG:-${HERE}/kind-config-lite.yaml}"
+  CILIUM_KIND_VALUES="${HERE}/cilium-values-kind-lite.yaml"
+  WITH_MONITORING="${WITH_MONITORING:-false}"
+  WITH_CERT_MANAGER="${WITH_CERT_MANAGER:-false}"
+else
+  KIND_CONFIG="${KIND_CONFIG:-${HERE}/kind-config.yaml}"
+  CILIUM_KIND_VALUES="${HERE}/cilium-values-kind.yaml"
+fi
 WITH_MONITORING="${WITH_MONITORING:-true}"
+WITH_CERT_MANAGER="${WITH_CERT_MANAGER:-true}"
 WITH_GIE="${WITH_GIE:-false}"
 WITH_TRAINER="${WITH_TRAINER:-false}"
 WITH_SECURITY="${WITH_SECURITY:-false}"
@@ -31,12 +43,12 @@ render() { sed -e "s|SIM_IMAGE|${SIM_IMAGE}|g" -e "s|RAY_IMAGE|${RAY_IMAGE}|g" "
 # ---------------------------------------------------------------- cluster
 if ! kind get clusters | grep -qx "${CLUSTER}"; then
   log "Creating kind cluster ${CLUSTER}"
-  kind create cluster --name "${CLUSTER}" --config "${HERE}/kind-config.yaml"
+  kind create cluster --name "${CLUSTER}" --config "${KIND_CONFIG}"
 fi
 kubectl config use-context "kind-${CLUSTER}"
 
 # ---------------------------------------------------------------- platform
-API_SERVER_IP="${CLUSTER}-control-plane" CILIUM_VALUES="${HERE}/cilium-values-kind.yaml" \
+API_SERVER_IP="${CLUSTER}-control-plane" CILIUM_VALUES="${CILIUM_KIND_VALUES}" \
   "${ROOT}/platform/00-cilium/install.sh"
 kubectl wait --for=condition=Ready nodes --all --timeout=5m
 
@@ -60,7 +72,9 @@ YAML
 
 "${HERE}/fake-gpus.sh" "${FAKE_GPUS_PER_NODE}"
 "${ROOT}/platform/01-namespaces/install.sh"
-"${ROOT}/platform/03-cert-manager/install.sh"
+if [[ "${WITH_CERT_MANAGER}" == "true" ]]; then
+  "${ROOT}/platform/03-cert-manager/install.sh"
+fi
 if [[ "${WITH_MONITORING}" == "true" ]]; then
   "${ROOT}/platform/06-monitoring/install.sh"
 fi

@@ -33,6 +33,8 @@ kubectl -n monitoring port-forward svc/kps-grafana 3000:80     # admin/prom-oper
 ./down.sh
 ```
 
+Low on memory? `PROFILE=lite ./up.sh` (fits ~8 GB Docker; run tests with `SKIP_RAY=true ./test.sh`).
+
 Flags: `WITH_MONITORING=false` (lighter), `WITH_SECURITY=true` (Kyverno audit + Falco + OpenBao/ESO), `WITH_GIE=true` (Inference
 Extension pool of 3 sims), `WITH_TRAINER=true` (Kubeflow Trainer),
 `SIM_IMAGE=ghcr.io/llm-d/llm-d-inference-sim:<tag>` to pin the simulator.
