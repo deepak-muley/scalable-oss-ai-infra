@@ -20,8 +20,8 @@ a GPU lab, with the path to hyperscale documented.
 │              405B multi-node via LWS, LoRA adapters, Ray Serve LLM)        │
 │              LMCache: KV cache GPU→CPU→disk→shared remote                  │
 ├────────────────────────────────────────────────────────────────────────────┤
-│ TRAINING     Kueue (quota/queues/preemption) · Kubeflow Trainer (TrainJob) │
-│              KubeRay (RayJob/RayCluster/RayService) · MLflow · MinIO (S3)  │
+│ TRAINING     Kueue (quota/preemption) · KAI (GPU place, share, gang) ·     │
+│              Kubeflow Trainer · KubeRay · MLflow · MinIO (S3)              │
 ├────────────────────────────────────────────────────────────────────────────┤
 │ SECURITY     Keycloak · OpenBao + External Secrets · Kyverno · Falco ·     │
 │              Trivy · Cilium NetworkPolicy/WireGuard · Llama Guard          │
@@ -53,7 +53,8 @@ a GPU lab, with the path to hyperscale documented.
 | Observe it | [docs/08-observability.md](docs/08-observability.md) |
 | A guided sequence of hands-on labs | [docs/09-learning-path.md](docs/09-learning-path.md) |
 | **Go from lab to hyperscale** | [docs/10-scaling-to-hyperscale.md](docs/10-scaling-to-hyperscale.md) |
-| Design decisions (Istio? KServe? Volcano? llm-d?) | [docs/11-decisions-faq.md](docs/11-decisions-faq.md) |
+| Design decisions (Istio? KServe? Kueue vs KAI? llm-d?) | [docs/11-decisions-faq.md](docs/11-decisions-faq.md) |
+| **GPU scheduling** (admission vs placement vs request routing) | [docs/22-scheduling.md](docs/22-scheduling.md) · [`platform/10-kai-scheduler`](platform/10-kai-scheduler/) |
 | Secure it | [docs/12-security.md](docs/12-security.md) |
 | Fix it | [docs/13-troubleshooting.md](docs/13-troubleshooting.md) |
 | **Build your own model**: data → pretrain → SFT → RL (GRPO) → eval gate → serve | [docs/14-build-your-own-model.md](docs/14-build-your-own-model.md) · [`lifecycle/`](lifecycle/) |
@@ -86,6 +87,7 @@ platform/
   07-keda/                    event-driven autoscaling
   08-lws/                     LeaderWorkerSet (multi-node model replicas)
   09-kueue/                   GPU quotas, queues, cohorts, priorities
+  10-kai-scheduler/           KAI: bin-pack, fractional GPU, gang, topology
 security/
   01-identity-keycloak/       OIDC + gateway JWT policy
   02-secrets-openbao-eso/     OpenBao + External Secrets Operator

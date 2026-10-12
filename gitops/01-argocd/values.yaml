@@ -21,6 +21,11 @@ configs:
       type: helm
       url: registry.k8s.io/kueue/charts
       enableOCI: "true"
+    oci-kai-scheduler:
+      name: kai-scheduler
+      type: helm
+      url: ghcr.io/kai-scheduler/kai-scheduler
+      enableOCI: "true"
     oci-lws:
       name: lws
       type: helm

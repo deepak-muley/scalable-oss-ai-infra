@@ -31,6 +31,7 @@ flowchart TB
 
   subgraph TR["Training layer — ns: training, mlops"]
     KQ[Kueue]
+    KAI[KAI Scheduler]
     TJ[Kubeflow TrainJob → JobSet]
     RJ[KubeRay RayJob / RayCluster]
     MLF[MLflow]
@@ -57,6 +58,7 @@ flowchart TB
   V1 <--> LMC
   V1 & V2 & V3 & V4 --> NFS
   KQ --> TJ & RJ
+  KAI -. opt-in pods .-> TJ & RJ
   TJ & RJ --> S3 & MLF
   S3 -->|LoRA adapters| V3
   PROM -->|vllm:num_requests_waiting| KEDA -->|scale| V1
@@ -73,7 +75,7 @@ flowchart TB
 | `nfs-provisioner` | NFS RWX provisioner | `platform/04` |
 | `gpu-operator` | NVIDIA operator stack | `platform/05` |
 | `monitoring` | Prometheus, Grafana, Alertmanager | `platform/06` |
-| `keda`, `lws-system`, `kueue-system` | operators | `platform/07–09` |
+| `keda`, `lws-system`, `kueue-system`, `kai-scheduler` | operators | `platform/07–10` |
 | `envoy-gateway-system` | Envoy Gateway controller **and the Envoy proxy pods** | `gateway/01` |
 | `envoy-ai-gateway-system` | AI Gateway controller (extension server) | `gateway/02` |
 | `ai-gateway` | `Gateway`, `AIGatewayRoute`s, backends, auth policies | `gateway/03` |
@@ -176,7 +178,7 @@ flowchart LR
   TJ --> KQ{Kueue<br/>quota available?}
   KQ -- no --> W[Pending / may preempt lower priority]
   KQ -- yes --> ADM[Admitted → pods created<br/>all-or-nothing]
-  ADM --> SCH[kube-scheduler → GPU nodes]
+  ADM --> SCH[kube-scheduler or KAI → GPU nodes]
   SCH --> RUN[torchrun / Ray Train<br/>NCCL over Cilium or RDMA]
   RUN -->|metrics| MLF[MLflow]
   RUN -->|checkpoints / adapters| S3[(MinIO)]
@@ -193,6 +195,7 @@ flowchart LR
 |---|---|---|
 | GPU Operator | node hardware | installs driver/toolkit, advertises `nvidia.com/gpu` |
 | Kueue | queued Workloads + quotas | unsuspends jobs, preempts lower priority |
+| KAI Scheduler | pods with `schedulerName: kai-scheduler` | bin-packs or spreads GPUs, gangs, fractions, topology |
 | KEDA | Prometheus vLLM metrics | HPA replica count of vLLM Deployments |
 | Ray autoscaler | Ray resource demand | RayCluster worker pod count |
 | Envoy Gateway + AI GW | Gateway API + AI CRDs | Envoy xDS config |

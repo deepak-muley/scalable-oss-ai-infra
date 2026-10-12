@@ -1,0 +1,22 @@
+# Step 2. Apply only after kai-train-low is Running.
+# PriorityClass "build" has value 100, which KAI treats as not preemptible,
+# and notebooks has a 1 GPU limit, so this pod takes the GPU from kai-train-low.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: kai-build-high
+  namespace: training
+  labels:
+    app: kai-preempt
+    kai.scheduler/queue: notebooks
+spec:
+  schedulerName: kai-scheduler
+  priorityClassName: build
+  restartPolicy: Never
+  containers:
+    - name: work
+      image: busybox:1.36
+      command: ["sh", "-c", "echo high priority interactive; sleep 600"]
+      resources:
+        requests: {cpu: 10m, memory: 32Mi}
+        limits: {nvidia.com/gpu: "1"}

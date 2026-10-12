@@ -6,7 +6,7 @@ root-app.yaml                 (apply by hand, once)
     ├── 00-project.yaml       AppProject ai-lab                         wave -20
     ├── 10-cilium.yaml        chart + $values + lb-ipam.yaml             wave -10
     ├── 11..19                namespaces, cert-manager, NFS, GPU Operator,
-    │                         monitoring, KEDA, LWS, Kueue, queues       waves -9..-4
+    │                         monitoring, KEDA, LWS, Kueue, KAI, queues  waves -9..-4
     ├── 20..25                OpenBao, ESO, Kyverno(+policies), Falco,
     │                         Trivy, Keycloak                            wave -4
     ├── 30..33                Envoy Gateway, AI Gateway CRDs/controller,
@@ -23,7 +23,7 @@ applicationset-gpu-clusters.yaml  multi-cluster example (not auto-applied)
 |---|---|---|
 | **Multi-source Application**: upstream chart + values from this repo (`ref: values`, `$values/...`) | `15-monitoring.yaml` | the chart stays upstream, *your* config stays in your git; the same values files the `install.sh` scripts use |
 | Extra **directory source** with `include` | `15-monitoring.yaml` (podmonitors), `12-cert-manager.yaml` (issuer) | ship the chart and the CRs that configure it as one unit |
-| **OCI Helm charts** | `17-lws.yaml`, `18-kueue.yaml`, `30-32` | repo registered with `enableOCI` in `01-argocd/values.yaml` |
+| **OCI Helm charts** | `17-lws.yaml`, `18-kueue.yaml`, `18b-kai-scheduler.yaml`, `30-32` | repo registered with `enableOCI` in `01-argocd/values.yaml` |
 | **Kustomize from upstream git tag** | `53-kubeflow-trainer.yaml` | the project ships kustomize, not Helm |
 | **Remote values URL** | `30-envoy-gateway.yaml` | reuse upstream's extension-manager values pinned to a tag |
 | `ServerSideApply=true` | monitoring, Cilium, KEDA, Kueue | huge CRDs exceed client-side-apply annotation limits |
@@ -37,6 +37,7 @@ applicationset-gpu-clusters.yaml  multi-cluster example (not auto-applied)
 * `13-nfs-provisioner.yaml` → `nfs.server`, `nfs.path`
 * `14-gpu-operator.yaml` → `driver.enabled`
 * `platform/09-kueue/queues.yaml` → GPU quotas
+* `platform/10-kai-scheduler/queues.yaml` → KAI parent/leaf GPU budgets (must not recount Kueue's GPUs)
 * Fork the repo first if you're not the owner. `repoURL` points at
   `deepak-muley/scalable-oss-ai-infra`. Find and replace it in `apps/`,
   `root-app.yaml` and `applicationset-gpu-clusters.yaml`.

@@ -59,6 +59,13 @@ Kueue concepts in this lab (`platform/09-kueue/queues.yaml`):
   the same queue.
 * Online vLLM Deployments are **not** in Kueue. They have a fixed
   reservation, and Kueue manages what's left.
+* Placement of the admitted pods is still kube-scheduler, unless the pod
+  sets `schedulerName: kai-scheduler`. KAI
+  (`platform/10-kai-scheduler`, [docs/22](22-scheduling.md)) is the
+  GPU-aware placer: bin-pack, fractional GPUs, gang via
+  `kai.scheduler/batch-min-member`, and topology. Point a job at one queue
+  system. A TrainJob with both a Kueue queue label and a KAI queue label
+  is counted twice.
 
 ## 4. Kubeflow Trainer versus KubeRay: when to use which
 

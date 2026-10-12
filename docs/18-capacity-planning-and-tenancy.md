@@ -77,6 +77,11 @@ flowchart TB
 * The **ResourceQuota** is a hard backstop in case someone bypasses Kueue.
 * **Token budgets** at the gateway are the serving-side equivalent of a GPU
   quota for shared model servers.
+* **KAI** (`platform/10-kai-scheduler`) can hold the same tree — parent pool,
+  per-team leaves, over-quota weights — and also places the pods (bin-pack,
+  fractions, gang, topology). Put a GPU in Kueue *or* in a KAI queue. The
+  picture above is the Kueue shape; [docs/22](22-scheduling.md) is the
+  comparison.
 
 ### Exercise 18.4 — onboard two tenants and fight
 On kind (fake GPUs) or the lab:

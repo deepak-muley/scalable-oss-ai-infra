@@ -10,7 +10,7 @@
 | Router | production-stack router `/metrics`, EPP metrics | per-engine QPS, routing decisions, cache-hit estimates |
 | Engine | vLLM `/metrics` | `vllm:num_requests_running`, `vllm:num_requests_waiting`, `vllm:gpu_cache_usage_perc` / `vllm:kv_cache_usage_perc`, `vllm:prefix_cache_hits/queries`, `vllm:time_to_first_token_seconds`, `vllm:time_per_output_token_seconds` (newer: inter-token latency), `vllm:e2e_request_latency_seconds`, `vllm:prompt_tokens_total`, `vllm:generation_tokens_total`, preemptions |
 | KV cache | LMCache metrics | hit rate per tier, bytes stored and retrieved |
-| Scheduling | Kueue metrics | pending workloads, admission wait time, quota usage, preemptions |
+| Scheduling | Kueue metrics; KAI scheduler `:8080/metrics` and pod Events | pending workloads, admission wait time, quota usage, preemptions; for KAI, `kubectl describe` on the pod/PodGroup is the placement trace |
 | Training | MLflow, DCGM, NCCL logs | loss, tokens/s, MFU, step time breakdown |
 | Ray | Ray dashboard + Prometheus | actor/task states, object store, autoscaler decisions |
 

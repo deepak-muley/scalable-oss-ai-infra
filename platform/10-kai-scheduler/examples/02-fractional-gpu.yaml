@@ -1,0 +1,48 @@
+# Two pods, half a GPU each. With bin-pack they should land on the SAME
+# physical GPU (0.5 + 0.5 = 1), which you can see as one reservation pod
+# in the kai-resource-reservation namespace and two user pods on one node.
+#
+# Needs a real GPU node: the binder starts a reservation pod that talks to
+# NVML. On kind this stays Pending. Do not also set nvidia.com/gpu — KAI
+# rejects a pod that asks for a fraction and a whole device.
+#
+# NonMemoryEnforced (the lab default) does not stop a pod from allocating
+# more GPU memory than its fraction. For a hard cap, switch the cluster to
+# HamiCore or NvFractions (see the README).
+apiVersion: v1
+kind: Pod
+metadata:
+  name: kai-half-a
+  namespace: training
+  labels:
+    kai.scheduler/queue: notebooks
+  annotations:
+    gpu-fraction: "0.5"
+spec:
+  schedulerName: kai-scheduler
+  restartPolicy: Never
+  containers:
+    - name: work
+      image: busybox:1.36
+      command: ["sh", "-c", "echo half GPU A; sleep 600"]
+      resources:
+        requests: {cpu: 10m, memory: 32Mi}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: kai-half-b
+  namespace: training
+  labels:
+    kai.scheduler/queue: notebooks
+  annotations:
+    gpu-fraction: "0.5"
+spec:
+  schedulerName: kai-scheduler
+  restartPolicy: Never
+  containers:
+    - name: work
+      image: busybox:1.36
+      command: ["sh", "-c", "echo half GPU B; sleep 600"]
+      resources:
+        requests: {cpu: 10m, memory: 32Mi}

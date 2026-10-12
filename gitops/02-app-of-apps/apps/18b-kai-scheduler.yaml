@@ -1,0 +1,35 @@
+# OCI chart. Repo registered with enableOCI in 01-argocd/values.yaml.
+# Pods opt in with schedulerName: kai-scheduler; this install does not move
+# existing workloads off kube-scheduler.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kai-scheduler
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"
+spec:
+  project: ai-lab
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kai-scheduler
+  sources:
+    - repoURL: ghcr.io/kai-scheduler/kai-scheduler
+      chart: kai-scheduler
+      targetRevision: "v0.18.5"
+      helm:
+        valueFiles:
+          - $values/platform/10-kai-scheduler/values.yaml
+    - repoURL: https://github.com/deepak-muley/scalable-oss-ai-infra.git
+      targetRevision: main
+      ref: values
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: false
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff: {duration: 10s, factor: 2, maxDuration: 5m}

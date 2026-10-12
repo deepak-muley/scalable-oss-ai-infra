@@ -32,6 +32,7 @@ the "why" lives.
 | # | Read / do | Why |
 |---|---|---|
 | 10 | 📖 [06 — Training deep dive](06-training-deep-dive.md) | parallelism, Kueue, Kubeflow Trainer vs KubeRay, RL |
+| 10b | 📖 [22 — Scheduling](22-scheduling.md) | kube-scheduler vs Kueue vs KAI vs request routing, with numbers |
 | 11 | 📖 [14 — Build your own model](14-build-your-own-model.md) + 🛠 [`lifecycle/`](../lifecycle/README.md) | data → pretrain → SFT → RL → ship: the core of what a lab does |
 | 12 | 🛠 [09 — Learning path](09-learning-path.md), Stages 2–3 + Track A | multi-GPU and multi-node labs |
 
@@ -53,7 +54,8 @@ the "why" lives.
 | Doc | Why |
 |---|---|
 | [10 — Scaling to hyperscale](10-scaling-to-hyperscale.md) | the same pieces at 1000× scale |
-| [11 — Decisions & FAQ](11-decisions-faq.md) | why each choice was made (Istio? llm-d? Volcano?). Read last, once you have your own opinions |
+| [11 — Decisions & FAQ](11-decisions-faq.md) | why each choice was made (Istio? llm-d? Kueue vs KAI?). Read last, once you have your own opinions |
+| [22 — Scheduling](22-scheduling.md) | who gets a GPU, and where the pod lands |
 
 ## Keep open the whole time
 
@@ -75,3 +77,4 @@ the "why" lives.
 | 08 | [Observability basics](08-observability.md) | 19 | [Advanced serving](19-advanced-serving.md) |
 | 09 | [Learning path (hands-on labs)](09-learning-path.md) | 20 | [Apps & workbench](20-apps-and-workbench.md) |
 | 10 | [Scaling to hyperscale](10-scaling-to-hyperscale.md) | 21 | [Day-2 ops & multicluster](21-day2-ops-and-multicluster.md) |
+| 22 | [Scheduling (Kueue, KAI, placement)](22-scheduling.md) | | |

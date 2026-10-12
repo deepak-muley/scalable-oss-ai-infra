@@ -75,9 +75,11 @@ corpus, multi-turn chat, and code assistants re-sending repositories. Use
 | LoRA-affinity | GIE EPP | many adapters, where routing to pods that already have it loaded matters |
 | intent/semantic | vLLM Semantic Router | cost: send easy queries to small models |
 
-The scoring in modern schedulers (GIE/llm-d) is a **weighted sum** of
+The scoring in modern request routers (GIE/llm-d) is a **weighted sum** of
 several scorers (prefix-hit, queue, KV-utilisation, LoRA), and you tune the
-weights.
+weights. That "scheduler" picks a replica for one HTTP call. It does not
+decide which team owns a GPU. Job admission and GPU placement are
+[docs/22](22-scheduling.md).
 
 ## 6. Prefill/decode disaggregation (P/D)
 

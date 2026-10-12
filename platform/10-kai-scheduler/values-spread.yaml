@@ -1,0 +1,9 @@
+# Overlay: place each GPU pod on the node with the most free GPUs.
+#   helm upgrade kai-scheduler oci://ghcr.io/kai-scheduler/kai-scheduler/kai-scheduler \
+#     -n kai-scheduler -f values.yaml -f values-spread.yaml
+#
+# Spread survives a single node failure with less concentrated loss, and it
+# fragments the pool: eight 1-GPU pods across four 2-GPU nodes leave no node
+# with 2 free GPUs, so a later 2-GPU pod cannot start.
+scheduler:
+  placementStrategy: spread

@@ -16,7 +16,8 @@ knowing. Licences are as of writing; check before commercial use.
 | **kube-prometheus-stack** | Prometheus, Alertmanager, Grafana | DCGM, vLLM, Envoy, Kueue, Ray metrics; KEDA queries it | VictoriaMetrics, Thanos/Mimir at scale | Apache-2.0 / AGPL (Grafana) |
 | **KEDA** | autoscale on Prometheus queries, cron, scale-to-zero | vLLM Deployments (via HPA) | HPA + prometheus-adapter, Knative | Apache-2.0 |
 | **LeaderWorkerSet** | a "replica" spanning multiple pods/nodes | vLLM multi-node, llm-d, Kueue | JobSet (batch), RayCluster | Apache-2.0 |
-| **Kueue** | quotas, queues, cohorts/borrowing, priorities, preemption, gang admission | TrainJob, RayJob, Job, JobSet, LWS | Volcano, YuniKorn, Slurm (Slinky/SUNK on k8s) | Apache-2.0 |
+| **Kueue** | quotas, queues, cohorts/borrowing, priorities, preemption, gang admission. Decides *whether* a job starts; kube-scheduler places the pods | TrainJob, RayJob, Job, JobSet, LWS | KAI, Volcano, YuniKorn, Slurm (Slinky/SUNK on k8s) | Apache-2.0 |
+| **KAI Scheduler** | GPU placement for pods that set `schedulerName: kai-scheduler`: hierarchical queues, bin-pack/spread, fractional GPU, gang, topology. Runs beside kube-scheduler | Jobs, Ray, notebooks. Do not also count those GPUs in Kueue | Kueue + kube-scheduler, Volcano, YuniKorn | Apache-2.0 |
 
 ## Gateway and routing
 

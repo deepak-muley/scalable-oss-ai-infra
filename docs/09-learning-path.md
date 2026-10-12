@@ -11,10 +11,17 @@ the Envoy config: `kubectl -n envoy-gateway-system port-forward <envoy-pod>
 19000` and open `localhost:19000/config_dump`. *Q: where in the config is
 the model → backend mapping?*
 
-**Lab 0.2 — Kueue economics.** Use the `kueue-demo.yaml` scenario and change
-the quotas and cohort borrowing. *Q: what happens to a running low-priority
-job when a high-priority one arrives? How does `reclaimWithinCohort` change
-it?*
+**Lab 0.2 — Kueue economics.** Use the `kueue-demo.yaml` scenario (three
+jobs: `low-a`, `low-b`, `high-c`) and change the quotas and cohort
+borrowing. The arithmetic is in [docs/22](22-scheduling.md). *Q: what
+happens to a running low-priority job when a high-priority one arrives? How
+does `reclaimWithinCohort` change it?*
+
+**Lab 0.5 — KAI on fake GPUs.** Install `platform/10-kai-scheduler` and
+apply its `queues.yaml`. Run examples 01, 03, and 04 (whole GPU, gang,
+preemption: low pod first, then high). Skip example 02 until you have a real GPU. *Q: with
+`batch-min-member` removed from the gang Job, does one pod start while the
+other stays Pending?*
 
 **Lab 0.3 — Autoscaling dynamics.** Run the KEDA demo on the simulator. Vary
 the `threshold`, `pollingInterval` and HPA behaviour. Raise the simulator's
@@ -64,6 +71,18 @@ replicas of an 8B model. *Q: which wins on throughput, and which on latency?*
 **Lab 2.5 — Training vs inference contention.** Give Kueue all GPUs not used
 by serving. Run `rayjob-batch-inference` (low priority) and then
 `trainjob-pytorch-ddp` (high priority).
+
+**Lab 2.6 — Gang versus a stranded rank.** On KAI, apply
+`examples/03-gang-job.yaml`, then the same Job with `batch-min-member`
+removed and only one GPU free. *Q: how long does the running pod sit in
+`sleep` before you would have noticed, in a real torchrun, that rendezvous
+can never complete?*
+
+**Lab 2.7 — Bin-pack versus spread.** Submit four 1-GPU pods
+(`examples/01` copied four times, or a Job with parallelism 4 and no
+min-member) under the default bin-pack values. Record nodes. Upgrade with
+`values-spread.yaml`, delete the pods, submit again. *Q: after spread, can
+a new pod that requests 2 GPUs on one node still fit?*
 
 ## Stage 3 — multi-node
 

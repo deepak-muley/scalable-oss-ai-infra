@@ -1,0 +1,51 @@
+# Keep a 2-pod job inside one zone, and prefer a single rack.
+# Label nodes before applying, or the required constraint leaves the job
+# Pending (KAI will not place it on a node that lacks the label):
+#
+#   kubectl label node <gpu-a> topology.kubernetes.io/zone=lab ai.lab/rack=rack-1 --overwrite
+#   kubectl label node <gpu-b> topology.kubernetes.io/zone=lab ai.lab/rack=rack-1 --overwrite
+#   kubectl label node <gpu-c> topology.kubernetes.io/zone=lab ai.lab/rack=rack-2 --overwrite
+#
+# With bin-pack across domains, KAI fills rack-1 (both pods) before rack-2.
+# Swap topology-preferred-placement for a looser job and it may span racks
+# inside the zone. This is the same idea as Kueue TAS, expressed as KAI
+# annotations. NVLink domains use a label your GPU operator / DRA driver sets
+# (for example nvidia.com/gpu.clique) in place of ai.lab/rack.
+apiVersion: kai.scheduler/v1alpha1
+kind: Topology
+metadata:
+  name: lab-topology
+spec:
+  levels:
+    - nodeLabel: topology.kubernetes.io/zone
+    - nodeLabel: ai.lab/rack
+    - nodeLabel: kubernetes.io/hostname
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kai-topology
+  namespace: training
+  annotations:
+    kai.scheduler/topology: lab-topology
+    kai.scheduler/topology-required-placement: topology.kubernetes.io/zone
+    kai.scheduler/topology-preferred-placement: ai.lab/rack
+    kai.scheduler/batch-min-member: "2"
+spec:
+  parallelism: 2
+  completions: 2
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        kai.scheduler/queue: distributed-training
+    spec:
+      schedulerName: kai-scheduler
+      restartPolicy: Never
+      containers:
+        - name: work
+          image: busybox:1.36
+          command: ["sh", "-c", "echo topology rank on $(hostname); sleep 600"]
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {nvidia.com/gpu: "1"}

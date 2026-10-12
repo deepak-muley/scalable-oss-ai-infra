@@ -1,0 +1,40 @@
+# KAI Scheduler — lab values.
+# Full reference:
+#   helm show values oci://ghcr.io/kai-scheduler/kai-scheduler/kai-scheduler --version "$KAI_SCHEDULER_VERSION"
+#
+# KAI only places pods that set schedulerName: kai-scheduler. Everything else
+# (Kueue jobs, vLLM Deployments, the gateway) keeps using kube-scheduler.
+
+# Pin this so `helm template` / Argo CD do not try a live OpenShift lookup.
+openshift: false
+
+global:
+  # Fractional GPU is on, without a memory-enforcement runtime.
+  # Pods may use more GPU memory than they asked for. Switch modes when you
+  # need isolation (see README):
+  #   HamiCore   — HAMi enforces the memory cap (install kai-resource-isolator)
+  #   NvFractions — NVIDIA gpu-fractioning + CDI/NRI (set global.nvFractions.set)
+  gpuSharingMode: NonMemoryEnforced
+
+scheduler:
+  # One value applies to GPU and CPU on the default SchedulingShard.
+  # Pack pods onto the fewest nodes so a later large job still finds an
+  # empty node. Flip the cluster with values-spread.yaml.
+  #
+  # To bin-pack GPUs and spread CPUs, set the nodeplacement plugin as well
+  # and confirm the shard after install (`kubectl get schedulingshard default
+  # -o yaml`). The chart copies placementStrategy onto both resources; the
+  # plugin arguments are the per-resource override:
+  #   plugins:
+  #     nodeplacement:
+  #       arguments:
+  #         gpu: binpack
+  #         cpu: spread
+  placementStrategy: binpack
+
+# Render the Config CR as a normal chart resource so Helm and Argo CD both
+# own it. The post-install hook (kaiConfigDeployer) does not run under Argo.
+kaiConfig:
+  render: true
+kaiConfigDeployer:
+  enabled: false

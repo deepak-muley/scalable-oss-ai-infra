@@ -26,6 +26,7 @@ row kuberay-operator "$KUBERAY_VERSION" "$(helm_latest kuberay/kuberay-operator)
 row vllm-stack "$VLLM_STACK_CHART_VERSION" "$(helm_latest vllm/vllm-stack)"
 row lws "$LWS_VERSION" "$(gh_latest kubernetes-sigs/lws)"
 row kueue "$KUEUE_VERSION" "$(gh_latest kubernetes-sigs/kueue)"
+row kai-scheduler "$KAI_SCHEDULER_VERSION" "$(gh_latest kai-scheduler/KAI-scheduler)"
 row envoy-gateway "$ENVOY_GATEWAY_VERSION" "$(gh_latest envoyproxy/gateway)"
 row envoy-ai-gateway "$AI_GATEWAY_VERSION" "$(gh_latest envoyproxy/ai-gateway)"
 row gateway-api-inference-ext "$GATEWAY_API_INFERENCE_EXTENSION_VERSION" "$(gh_latest kubernetes-sigs/gateway-api-inference-extension)"

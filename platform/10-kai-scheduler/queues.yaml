@@ -1,0 +1,103 @@
+# Hierarchical GPU budgets for KAI Scheduler.
+#
+# Units: CPU is millicores, memory is MB, GPU is whole devices (fractions of
+# a GPU still add up against this number: two gpu-fraction=0.5 pods use 1).
+# quota  = guaranteed. limit -1 = no cap. limit 0 = may not use the resource.
+# overQuotaWeight = share of whatever the parent is not currently using.
+# priority (higher first) breaks ties when several queues want the same spare.
+#
+# Only leaf queues accept workloads. The parent is an organizational budget.
+# These numbers assume a 4-GPU pool handed to KAI. Online vLLM stays outside
+# KAI (no schedulerName), so do not set this quota to every GPU in the cluster
+# if serving already holds some. Child quotas must sum to the parent quota.
+#
+# The chart also creates default-parent-queue / default-queue (unlimited, no
+# guarantee). Lab examples use the leaves below, not the default queue.
+apiVersion: scheduling.run.ai/v2
+kind: Queue
+metadata:
+  name: ai-lab-gpus
+spec:
+  displayName: "Lab GPU pool"
+  resources:
+    cpu:
+      quota: 0
+      limit: -1
+      overQuotaWeight: 1
+    memory:
+      quota: 0
+      limit: -1
+      overQuotaWeight: 1
+    gpu:
+      quota: 4
+      limit: 4
+      overQuotaWeight: 1
+---
+# Notebooks and other interactive pods. Limit 1 keeps two full GPUs from both
+# running here, which is what examples/04-preemption-low.yaml demonstrates.
+# Two gpu-fraction=0.5 pods still fit (0.5 + 0.5 = 1).
+apiVersion: scheduling.run.ai/v2
+kind: Queue
+metadata:
+  name: notebooks
+spec:
+  displayName: "Notebooks"
+  parentQueue: ai-lab-gpus
+  priority: 200
+  resources:
+    cpu:
+      quota: 0
+      limit: -1
+      overQuotaWeight: 1
+    memory:
+      quota: 0
+      limit: -1
+      overQuotaWeight: 1
+    gpu:
+      quota: 1
+      limit: 1
+      overQuotaWeight: 1
+---
+apiVersion: scheduling.run.ai/v2
+kind: Queue
+metadata:
+  name: distributed-training
+spec:
+  displayName: "Distributed training"
+  parentQueue: ai-lab-gpus
+  priority: 100
+  resources:
+    cpu:
+      quota: 0
+      limit: -1
+      overQuotaWeight: 2
+    memory:
+      quota: 0
+      limit: -1
+      overQuotaWeight: 2
+    gpu:
+      quota: 2
+      limit: 4
+      overQuotaWeight: 2
+---
+apiVersion: scheduling.run.ai/v2
+kind: Queue
+metadata:
+  name: offline-batch
+spec:
+  displayName: "Offline batch"
+  parentQueue: ai-lab-gpus
+  priority: 50
+  resources:
+    cpu:
+      quota: 0
+      limit: -1
+      overQuotaWeight: 1
+    memory:
+      quota: 0
+      limit: -1
+      overQuotaWeight: 1
+    gpu:
+      quota: 1
+      limit: 4
+      overQuotaWeight: 1

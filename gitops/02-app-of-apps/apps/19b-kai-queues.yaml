@@ -1,0 +1,31 @@
+# EDIT gpu quota/limit in platform/10-kai-scheduler/queues.yaml, then commit.
+# Child quotas must sum to the parent. Leave serving GPUs out of this budget
+# when vLLM already holds them outside KAI.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kai-queues
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-4"
+spec:
+  project: ai-lab
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kai-scheduler
+  sources:
+    - repoURL: https://github.com/deepak-muley/scalable-oss-ai-infra.git
+      targetRevision: main
+      path: platform/10-kai-scheduler
+      directory:
+        include: 'queues.yaml'
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: false
+    syncOptions:
+      - CreateNamespace=true
+      - SkipDryRunOnMissingResource=true
+    retry:
+      limit: 5
+      backoff: {duration: 10s, factor: 2, maxDuration: 5m}

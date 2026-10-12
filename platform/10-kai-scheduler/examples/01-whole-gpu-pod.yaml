@@ -1,0 +1,20 @@
+# One pod, one whole GPU, placed by KAI on the distributed-training queue.
+# Works on kind with fake GPUs (kind/fake-gpus.sh). The container never sees
+# a device there; kubectl get pod -o wide still shows which node KAI chose.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: kai-whole-gpu
+  namespace: training
+  labels:
+    kai.scheduler/queue: distributed-training
+spec:
+  schedulerName: kai-scheduler
+  restartPolicy: Never
+  containers:
+    - name: work
+      image: busybox:1.36
+      command: ["sh", "-c", "echo scheduled by kai; sleep 600"]
+      resources:
+        requests: {cpu: 10m, memory: 32Mi}
+        limits: {nvidia.com/gpu: "1"}

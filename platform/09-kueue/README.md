@@ -20,6 +20,34 @@ Edit the `nominalQuota` numbers to match your hardware.
 Note: long-running online inference (vLLM Deployments) is usually NOT put
 behind Kueue — give it reserved nodes or a higher priority instead.
 
+## Worked example (kind or any cluster with ≥4 fake/real GPUs)
+
+`training-cq` guarantees 4 GPUs and may borrow the 2 guaranteed to
+`batch-inference-cq`. `kind/manifests/kueue-demo.yaml` submits three jobs
+of 4 GPUs each (2 pods × 2 GPUs):
+
+| Job | Priority | Result |
+|---|---|---|
+| `low-a` | low | Admitted. Uses the 4-GPU guarantee. |
+| `low-b` | low | Pending. 4 are taken; borrowing adds at most 2, and 6 < 8. |
+| `high-c` | high | Preempts `low-a` and takes the guarantee. `low-b` stays pending. |
+
+```bash
+kubectl apply -f kind/manifests/kueue-demo.yaml
+kubectl get workloads -n training
+kubectl describe workload -n training job-high-c-xxxxx   # name is prefixed
+```
+
+Apply the three Jobs separately if you want to watch each transition.
+Change `nominalQuota` on `training-cq` from 4 to 8 and `low-b` admits
+without borrowing. Set `reclaimWithinCohort` to `Never` and a lender stops
+taking borrowed GPUs back. The longer write-up, and how this differs from
+KAI placement, is [docs/22](../../docs/22-scheduling.md).
+
+KAI (`platform/10-kai-scheduler`) is a second scheduler you opt into per
+pod. Keep a given GPU in one quota system: Kueue nominal quotas and KAI
+queue quotas must not both count the same devices.
+
 Check which integrations your release enables (TrainJob / LWS support was
 added in later 0.1x releases):
 

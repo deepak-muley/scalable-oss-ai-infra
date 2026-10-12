@@ -6,7 +6,7 @@ idempotent (`helm upgrade --install` / `kubectl apply`).
 ```mermaid
 flowchart LR
   A[00 Cilium] --> B[01 namespaces] --> C[03 cert-manager] --> D[04 storage]
-  D --> E[05 GPU Operator] --> F[06 monitoring] --> G[07 KEDA / 08 LWS / 09 Kueue]
+  D --> E[05 GPU Operator] --> F[06 monitoring] --> G[07 KEDA / 08 LWS / 09 Kueue / 10 KAI]
   G --> S[security/*]
   S --> H[gateway 01 EG] --> I[gateway 02 AI GW]
   I --> J[inference 01 storage] --> K[inference 02-05 models] --> L[gateway 03 routes]
@@ -43,10 +43,15 @@ kubectl logs gpu-smoke-test            # ✅ nvidia-smi table
 ./platform/08-lws/install.sh
 ./platform/09-kueue/install.sh
 vi platform/09-kueue/queues.yaml && kubectl apply -f platform/09-kueue/queues.yaml
+
+# Optional, and safe to install: only pods with schedulerName kai-scheduler move.
+# Give KAI a GPU budget that Kueue is not also counting. SKIP_KAI=true skips it.
+./platform/10-kai-scheduler/install.sh
+vi platform/10-kai-scheduler/queues.yaml && kubectl apply -f platform/10-kai-scheduler/queues.yaml
 ```
 
-✅ `./scripts/verify.sh` shows GPUs on the nodes, all DaemonSets ready, and
-the ClusterQueues `Active`.
+✅ `./scripts/verify.sh` shows GPUs on the nodes, all DaemonSets ready,
+Kueue ClusterQueues `Active`, and the KAI queues if you installed step 10.
 
 ## 2. Security (recommended before exposing anything)
 

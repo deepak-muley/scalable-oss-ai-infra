@@ -10,6 +10,8 @@
 | `nvidia.com/gpu: 0` on a node | `kubectl -n gpu-operator logs ds/nvidia-device-plugin-daemonset` | toolkit not configured in containerd, or the validator failed |
 | Pod `Insufficient nvidia.com/gpu` | `kubectl describe node` | GPUs held by other pods; Kueue admitted more than the nodes have (quota above capacity) |
 | Kueue job never starts | `kubectl describe workload -n training` | no LocalQueue with that name, quota too small, or flavor labels don't match nodes |
+| KAI pod stays Pending | `kubectl describe pod`, `kubectl describe queue <leaf>`, `kubectl get podgroups -n training` | queue label names a parent or a missing queue; `gpu-fraction` combined with `nvidia.com/gpu`; cpu/memory `limit: 0` on the queue; gang `batch-min-member` larger than free GPUs; topology required label absent; fractional pod on kind (no NVML) |
+| Job admitted and still short one rank | pod events, Kueue `waitForPodsReady`, KAI `batch-min-member` | gang is off, so kube-scheduler started the pods that fit and left the rest. See [docs/22](22-scheduling.md) |
 
 ## Inference
 

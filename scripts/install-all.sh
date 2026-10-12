@@ -18,7 +18,8 @@ platform() {
   "${ROOT}/platform/07-keda/install.sh"
   "${ROOT}/platform/08-lws/install.sh"
   "${ROOT}/platform/09-kueue/install.sh"
-  echo ">> remember: edit+apply platform/00-cilium/lb-ipam.yaml (or 02-metallb/ip-pool.yaml) and platform/09-kueue/queues.yaml"
+  [[ "${SKIP_KAI:-false}" == "true" ]] || "${ROOT}/platform/10-kai-scheduler/install.sh"
+  echo ">> remember: edit+apply platform/00-cilium/lb-ipam.yaml (or 02-metallb/ip-pool.yaml), platform/09-kueue/queues.yaml, and platform/10-kai-scheduler/queues.yaml"
 }
 gateway() {
   "${ROOT}/gateway/01-envoy-gateway/install.sh"

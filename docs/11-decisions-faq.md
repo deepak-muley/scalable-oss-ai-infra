@@ -71,16 +71,32 @@ All are valid **higher-level platforms** over the same primitives:
 
 Learn the primitives here first, then adopt one if it fits.
 
-## Kueue vs Volcano vs Slurm
+## Kueue vs KAI vs Volcano vs Slurm
 
-* **Kueue** (SIG Scheduling) works *with* the default scheduler; it decides
-  admission, not placement. It supports TrainJob, RayJob, JobSet, LWS and
-  plain Pods, plus MultiKueue and TAS. It has the most momentum in upstream
-  Kubernetes.
+These answer different questions. The long version, with an 8-GPU walk-through,
+is [docs/22](22-scheduling.md).
+
+* **kube-scheduler** places one pod at a time. It is what vLLM Deployments
+  use. It will start rank 0 of a training job and leave rank 1 Pending.
+* **Kueue** (SIG Scheduling) decides admission: quota, cohort borrowing,
+  priority, preemption. It then unsuspends the job and kube-scheduler
+  places the pods. It supports TrainJob, RayJob, JobSet, LWS and plain
+  Pods, plus MultiKueue and TAS. This repo's training jobs use it by default.
+* **KAI Scheduler** (CNCF sandbox, the open-sourced Run:ai scheduler) is a
+  second scheduler pods opt into. It queues *and* places: bin-pack versus
+  spread, fractional GPU, gang, hierarchical fair share, topology. Installed
+  in `platform/10-kai-scheduler`. Use it for the workloads where placement
+  is the lesson. Keep its GPU budget disjoint from Kueue's nominal quotas.
 * **Volcano** replaces the scheduler (gang scheduling, queues, many
-  plugins) and is widely used in China and in HPC-style shops.
+  plugins) and is widely used in HPC-style shops. Not installed here: Kueue
+  plus KAI cover the same ground with the job APIs this lab already uses.
+* **YuniKorn** is the other strong hierarchical-queue scheduler (fair share
+  rooted in the YARN model). Same reason it is not installed.
 * **Slurm** remains the HPC standard. **Slinky** (SchedMD) and SUNK
   (CoreWeave) run Slurm on Kubernetes when researchers want `sbatch`.
+
+A request router (production-stack, Inference Extension, llm-d) is a fourth
+thing: it picks a running replica for one HTTP call. It does not allocate GPUs.
 
 ## Cilium LB-IPAM vs MetalLB
 

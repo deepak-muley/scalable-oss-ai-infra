@@ -9,5 +9,6 @@ section "GPU operator";      kubectl -n gpu-operator get pods --no-headers 2>/de
 section "Gateway";           kubectl get gateway -A; kubectl get aigatewayroute -A
 section "Inference pods";    kubectl -n llm-serving get pods -o wide
 section "Kueue";             kubectl get clusterqueue; kubectl get workloads -A
+section "KAI";               kubectl get queues.scheduling.run.ai 2>/dev/null || echo "KAI not installed (SKIP_KAI=true, or install platform/10-kai-scheduler)"
 section "Training";          kubectl get trainjob,rayjob,raycluster -A 2>/dev/null
 section "Autoscaling";       kubectl get scaledobject -A

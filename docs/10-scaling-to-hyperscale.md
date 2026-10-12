@@ -42,7 +42,7 @@ flowchart TB
 | Manual `helm install` | **GitOps** with **Argo CD** (ApplicationSets per cluster) or Flux. This repo's folders map 1:1 to Argo Applications |
 | kubeadm by hand | immutable node images (Talos, Flatcar, or Ubuntu with image pipelines) and automated provisioning |
 | one Kueue | **MultiKueue**: a manager cluster dispatches jobs to worker clusters with capacity |
-| node labels | **Topology-Aware Scheduling** (Kueue TAS) on rack, block and NVLink-domain labels, so a job's ranks land on the fewest network hops. Needed for GB200 NVL72 domains |
+| node labels | **Topology-aware placement** (Kueue TAS or KAI Topology) on rack, block and NVLink-domain labels, so a job's ranks land on the fewest network hops. Needed for GB200 NVL72 domains |
 | device plugin | **DRA** with NVIDIA's DRA driver: ComputeDomains for multi-node NVLink (IMEX), fine-grained sharing |
 
 Kubernetes control plane at scale: 5k–15k nodes per cluster has been shown
@@ -137,6 +137,7 @@ Add these on top of `security/`:
 | Cilium | same, native routing + BGP, ClusterMesh |
 | GPU Operator | same, plus Network Operator, DRA driver and a health-remediation system |
 | Kueue | Kueue + MultiKueue + TAS + fair sharing |
+| KAI Scheduler | same scheduler at larger pools: bin-pack, fractional GPU, hierarchical queues, topology on the NVLink domain. One quota system per GPU, shared with Kueue only by splitting the pool |
 | Kubeflow Trainer / JobSet | same, running torchtitan or Megatron |
 | KubeRay | same, for data, RL and batch inference |
 | Envoy AI Gateway | regional fleets, global rate-limit service |
