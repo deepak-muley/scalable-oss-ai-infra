@@ -25,6 +25,7 @@ the "why" lives.
 | 6 | 📖 [05 — Inference deep dive](05-inference-deep-dive.md) | KV cache, batching, LMCache, routing: the most important doc for serving |
 | 6a | 📖 [25 — KV cache, prefill, and decode](25-kv-cache-prefill-decode.md) | what the three terms mean, and which latency each phase is |
 | 6b | 📖 [24 — Scaling inference](24-scaling-inference.md) | static, dynamic, and continuous batching; backfill vs preemption |
+| 6c | 📖 [27 — Inference Runtime and GPU Platform Knowledge Base](27-inference-runtime-and-gpu-platform-knowledge-base.md) | request path from the API down to the GPU, and which layer owns each failure |
 | 7 | 📖 [07 — Model catalog & GPU sizing](07-model-catalog.md) | the memory math |
 | 8 | 📖 [03 — Hardware & cluster prereqs](03-hardware-and-cluster-prereqs.md) → 🛠 [04 — Install runbook](04-install-runbook.md) | get your GPU cluster up. How many GPUs fit on one node: [23](23-gpus-per-node.md) |
 | 9 | 🛠 [09 — Learning path](09-learning-path.md), Stage 1 | vLLM knobs, prefix caching, LMCache: measure everything |
@@ -50,6 +51,7 @@ the "why" lives.
 | Advanced serving: llm-d P/D, SGLang, speculative decoding | [19 — Advanced serving](19-advanced-serving.md) |
 | Building on it: chat UI, RAG, agents + MCP, batch, notebooks | [20 — Apps & workbench](20-apps-and-workbench.md) |
 | Long-running agents: resume, action policy, skills, eval gate | [26 — Enterprise agent platform](26-enterprise-agent-platform.md) · [`agents/`](../agents/README.md) |
+| Inference runtime and the GPU platform | [27 — Inference Runtime and GPU Platform Knowledge Base](27-inference-runtime-and-gpu-platform-knowledge-base.md) |
 | Security (read before exposing anything to others) | [12 — Security](12-security.md) |
 
 ## Finish with
@@ -82,4 +84,4 @@ the "why" lives.
 | 10 | [Scaling to hyperscale](10-scaling-to-hyperscale.md) | 21 | [Day-2 ops & multicluster](21-day2-ops-and-multicluster.md) |
 | 22 | [Scheduling (Kueue, KAI, placement)](22-scheduling.md) | 23 | [GPUs per node](23-gpus-per-node.md) |
 | 24 | [Scaling inference (batching, backfill)](24-scaling-inference.md) | 25 | [KV cache, prefill, and decode](25-kv-cache-prefill-decode.md) |
-| 26 | [Enterprise agent platform](26-enterprise-agent-platform.md) | | |
+| 26 | [Enterprise agent platform](26-enterprise-agent-platform.md) | 27 | [Inference Runtime and GPU Platform Knowledge Base](27-inference-runtime-and-gpu-platform-knowledge-base.md) |

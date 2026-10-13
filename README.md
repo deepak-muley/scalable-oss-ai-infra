@@ -53,6 +53,7 @@ a GPU lab, with the path to hyperscale documented.
 | Learn inference internals (vLLM, LMCache, routing, autoscaling) | [docs/05-inference-deep-dive.md](docs/05-inference-deep-dive.md) |
 | What the KV cache, prefill, and decode are | [docs/25-kv-cache-prefill-decode.md](docs/25-kv-cache-prefill-decode.md) |
 | Scaling inference: batching algorithms and backfill | [docs/24-scaling-inference.md](docs/24-scaling-inference.md) |
+| Connect the inference runtime to the GPU platform | [Inference Runtime and GPU Platform Knowledge Base](docs/27-inference-runtime-and-gpu-platform-knowledge-base.md) |
 | Learn distributed training (parallelism, Kueue, Ray, RL) | [docs/06-training-deep-dive.md](docs/06-training-deep-dive.md) |
 | Size models to GPUs | [docs/07-model-catalog.md](docs/07-model-catalog.md) |
 | Observe it | [docs/08-observability.md](docs/08-observability.md) |
