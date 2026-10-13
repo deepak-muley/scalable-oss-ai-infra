@@ -1,0 +1,17 @@
+{
+  "name": "sre-agent",
+  "description": "Reads cluster state for the lab. Does not delete or exec.",
+  "url": "http://sre-agent-card.agents.svc.cluster.local:8080",
+  "version": "0.1.0",
+  "capabilities": {"streaming": false},
+  "defaultInputModes": ["text/plain"],
+  "defaultOutputModes": ["text/plain"],
+  "skills": [
+    {
+      "id": "cluster-read",
+      "name": "Cluster read",
+      "description": "List pods, query Prometheus, and search the lab docs.",
+      "tags": ["sre", "read-only"]
+    }
+  ]
+}

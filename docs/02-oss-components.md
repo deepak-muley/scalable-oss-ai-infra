@@ -74,6 +74,23 @@ knowing. Licences are as of writing; check before commercial use.
 | **Sigstore cosign** | image signing and verification | Notation | Apache-2.0 |
 | **Llama Guard / NeMo Guardrails / Presidio** | AI safety classification, rails, PII | Granite Guardian, ShieldGemma | various open licences |
 
+## Enterprise agent platform
+
+The model server is layer 1. Agents that run for days and call tools sit
+above it. Narrative and the install order: [docs/26](26-enterprise-agent-platform.md).
+Manifests: [`agents/`](../agents/README.md).
+
+| Component | Role | Notes | Alt | Licence |
+|---|---|---|---|---|
+| **Temporal** (`server start-dev` in the lab) | durable workflow: each tool call is an activity, so a new pod resumes | production uses the temporalio Helm chart and Postgres | Restate, DBOS | MIT |
+| **OPA** | allow, deny, budget, and kill switch for one tool call | Rego in `agents/02`; Kyverno still admits pods, Llama Guard still classifies text | Cedar, Cerbos | Apache-2.0 |
+| **Valkey** | working memory and the gateway's step counters | official image, emptyDir in the lab | Redis, KeyDB | BSD-3-Clause |
+| **Postgres** | episodic memory (`episodes`) | official image | — | PostgreSQL |
+| **Agent Skills** | `SKILL.md` manifests shared by harnesses | ConfigMap `agent-skills` | MCP tool list alone | — |
+| **A2A agent card** | how a second agent discovers skills to delegate | `/.well-known/agent-card.json` | a private RPC | Apache-2.0 (the spec's reference code) |
+| **gVisor** (`runsc`) | sandbox runtime for `exec_code` | RuntimeClass only; install `runsc` on the node yourself | Kata, Firecracker | Apache-2.0 |
+| **SPIRE** (opt-in) | SPIFFE ID for the agent ServiceAccount | `INSTALL_SPIRE=true` | — | Apache-2.0 |
+
 ## Do I need Istio?
 
 **No, not for this lab.** See [docs/11](11-decisions-faq.md#do-i-need-istio-or-another-service-mesh) for when you might add it.

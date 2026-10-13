@@ -75,6 +75,7 @@ Key insights that shape the design:
 | Observability | **Prometheus, Grafana, DCGM exporter, Hubble** (+ OpenTelemetry) | `platform/06-monitoring` |
 | Identity / secrets / policy / runtime | **Keycloak, OpenBao + ESO, Kyverno, Falco, Trivy** | `security/` |
 | Safety classifiers | **Llama Guard** on vLLM, NeMo Guardrails | `security/06-ai-guardrails` |
+| Enterprise agents (resume, action policy, skills, eval gate) | **Temporal, OPA, Valkey, Postgres, Agent Skills, A2A** | `agents/`, [docs/26](26-enterprise-agent-platform.md) |
 
 ## Lab scale versus hyperscale
 

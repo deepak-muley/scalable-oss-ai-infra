@@ -1,6 +1,8 @@
 # 24 — Scaling inference: batching, backfill, and when to add a GPU
 
-[docs/05](05-inference-deep-dive.md) names what an engine does.
+[docs/25](25-kv-cache-prefill-decode.md) is the prefill, decode, and KV-cache
+mechanism. [docs/05](05-inference-deep-dive.md) names what an engine does
+with it.
 [docs/18](18-capacity-planning-and-tenancy.md) turns an SLO into a GPU
 count. [docs/22](22-scheduling.md) decides which job may occupy a GPU.
 This doc is the layer between them: the algorithms that decide how full

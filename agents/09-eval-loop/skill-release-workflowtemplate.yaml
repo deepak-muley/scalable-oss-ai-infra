@@ -1,0 +1,70 @@
+# Skill promotion gate. Argo must watch namespace agents
+# (pipelines/01-argo-workflows/values.yaml workflowNamespaces).
+# Submit:
+#   argo submit -n agents --from workflowtemplate/skill-release --watch
+#   argo submit -n agents --from workflowtemplate/skill-release -p suite=bad --watch
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: skill-release
+  namespace: agents
+spec:
+  serviceAccountName: skill-release
+  entrypoint: release
+  arguments:
+    parameters:
+      - {name: skill, value: cluster-read}
+      - {name: version, value: "0.2.0"}
+      - {name: suite, value: pass}
+  templates:
+    - name: release
+      dag:
+        tasks:
+          - name: eval
+            template: eval
+          - name: promote
+            template: promote
+            dependencies: [eval]
+            when: "{{tasks.eval.outputs.parameters.passed}} == true"
+          - name: reject
+            template: reject
+            dependencies: [eval]
+            when: "{{tasks.eval.outputs.parameters.passed}} == false"
+    - name: eval
+      outputs:
+        parameters:
+          - name: passed
+            valueFrom: {path: /tmp/passed}
+      script:
+        image: python:3.12-slim
+        command: [python]
+        env:
+          - {name: SUITE, value: "{{workflow.parameters.suite}}"}
+          - {name: SCRIPT_DIR, value: /scripts}
+          - {name: EVAL_RESULT, value: /tmp/passed}
+        volumeMounts:
+          - {name: scorer, mountPath: /scripts}
+        source: |
+          import runpy
+          runpy.run_path("/scripts/eval_trajectories.py", run_name="__main__")
+      volumes:
+        - name: scorer
+          configMap:
+            name: skill-eval-src
+    - name: promote
+      container:
+        image: alpine/k8s:1.31.4
+        command: [sh, -c]
+        args:
+          - |
+            kubectl -n agents annotate configmap agent-skills \
+              agents.lab/promoted-skill="{{workflow.parameters.skill}}" \
+              agents.lab/promoted-version="{{workflow.parameters.version}}" \
+              --overwrite
+            kubectl -n agents get configmap agent-skills --show-labels
+    - name: reject
+      container:
+        image: python:3.12-slim
+        command: [python, -c]
+        args:
+          - print("skill {{workflow.parameters.skill}} version {{workflow.parameters.version}} not promoted")

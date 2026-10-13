@@ -66,10 +66,13 @@ apps() {
   "${ROOT}/apps/01-open-webui/install.sh"
   "${ROOT}/workbench/01-jupyterhub/install.sh"
 }
+agents() {
+  "${ROOT}/agents/install.sh"
+}
 
-LAYERS="platform|security|gateway|inference|training|observability|reliability|ops|apps"
+LAYERS="platform|security|gateway|inference|training|observability|reliability|ops|apps|agents"
 case "$LAYER" in
-  platform|gateway|inference|training|security|observability|reliability|ops|apps) "$LAYER" ;;
+  platform|gateway|inference|training|security|observability|reliability|ops|apps|agents) "$LAYER" ;;
   all) platform; security; gateway; inference; training ;;
   *) echo "usage: $0 [all|${LAYERS}]   (GitOps alternative: gitops/README.md)"; exit 1 ;;
 esac

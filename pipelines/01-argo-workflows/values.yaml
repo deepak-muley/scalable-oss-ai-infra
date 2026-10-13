@@ -1,7 +1,7 @@
 # Full reference: helm show values argo/argo-workflows
 controller:
   # Namespaces where Workflows may run (controller gets RBAC there).
-  workflowNamespaces: [argo, training, evaluation, llm-serving]
+  workflowNamespaces: [argo, training, evaluation, llm-serving, agents]
   workflowDefaults:
     spec:
       ttlStrategy:

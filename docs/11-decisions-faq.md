@@ -120,6 +120,15 @@ Kueue all stay the same. Try swapping one model to SGLang as an exercise.
 It's simple and RWX. At larger scale move to a parallel FS, object
 streaming (Run:ai streamer from S3) and node-local NVMe pre-staging (docs/10).
 
+## Where do long-running agents live?
+
+Above the model API, in [`agents/`](../agents/README.md) and
+[docs/26](26-enterprise-agent-platform.md). vLLM, the AI gateway, Kueue
+and Llama Guard stay where they are. Temporal resumes a run, OPA allows
+or denies each tool call, Keycloak token exchange scopes a credential to
+that call, and an Argo gate promotes a skill version the way the model
+pipeline promotes a checkpoint.
+
 ## Why not one giant Helm umbrella chart?
 
 For learning, each component's install is explicit and readable. For

@@ -1,0 +1,53 @@
+# Stock Python plus the gateway script from ConfigMap tool-gateway-src.
+# Created by install.sh. VALKEY_URL is optional: folder 05 fills it in.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tool-gateway
+  namespace: agents
+  labels: {app: tool-gateway}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: tool-gateway}}
+  template:
+    metadata:
+      labels: {app: tool-gateway}
+    spec:
+      securityContext: {runAsNonRoot: true, runAsUser: 65534}
+      containers:
+        - name: gateway
+          image: python:3.12-slim
+          command: ["python", "/app/tool_gateway.py"]
+          env:
+            - {name: OPA_URL, value: "http://opa.agents.svc:8181"}
+            - {name: VALKEY_URL, value: "valkey.agents.svc:6379"}
+            - {name: MAX_STEPS, value: "8"}
+            - {name: MAX_REPEATS, value: "3"}
+            - {name: LISTEN, value: "0.0.0.0:8090"}
+          ports:
+            - {name: http, containerPort: 8090}
+          readinessProbe:
+            httpGet: {path: /metrics, port: http}
+            periodSeconds: 5
+          volumeMounts:
+            - {name: src, mountPath: /app, readOnly: true}
+          resources:
+            requests: {cpu: 20m, memory: 64Mi}
+            limits: {memory: 256Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+      volumes:
+        - name: src
+          configMap: {name: tool-gateway-src}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tool-gateway
+  namespace: agents
+  labels: {app: tool-gateway}
+spec:
+  selector: {app: tool-gateway}
+  ports:
+    - {name: http, port: 8090, targetPort: http}

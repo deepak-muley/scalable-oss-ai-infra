@@ -1,0 +1,94 @@
+# install.sh substitutes VALKEY_VERSION and POSTGRES_VERSION.
+# emptyDir: a restart forgets memory. Point these at a PVC when you care.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: valkey
+  namespace: agents
+  labels: {app: valkey}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: valkey}}
+  template:
+    metadata:
+      labels: {app: valkey}
+    spec:
+      securityContext: {runAsNonRoot: true}
+      containers:
+        - name: valkey
+          image: valkey/valkey:VALKEY_VERSION
+          args: ["--dir", "/data", "--save", "", "--appendonly", "no"]
+          ports:
+            - {name: redis, containerPort: 6379}
+          readinessProbe:
+            exec:
+              command: ["valkey-cli", "ping"]
+            periodSeconds: 5
+          volumeMounts:
+            - {name: data, mountPath: /data}
+          resources:
+            requests: {cpu: 20m, memory: 64Mi}
+            limits: {memory: 256Mi}
+      volumes:
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: valkey
+  namespace: agents
+spec:
+  selector: {app: valkey}
+  ports:
+    - {name: redis, port: 6379, targetPort: redis}
+---
+# Official postgres image starts as root so it can fix data-dir permissions,
+# then drops to the postgres user. runAsNonRoot breaks that entrypoint.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: agents
+  labels: {app: postgres}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: postgres}}
+  template:
+    metadata:
+      labels: {app: postgres}
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:POSTGRES_VERSION
+          env:
+            - {name: POSTGRES_USER, value: agent}
+            - {name: POSTGRES_PASSWORD, value: lab-only-change-me}   # CHANGE ME
+            - {name: POSTGRES_DB, value: agent_memory}
+          ports:
+            - {name: postgres, containerPort: 5432}
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "agent", "-d", "agent_memory"]
+            periodSeconds: 5
+          volumeMounts:
+            - {name: data, mountPath: /var/lib/postgresql/data}
+            - {name: init, mountPath: /docker-entrypoint-initdb.d, readOnly: true}
+          resources:
+            requests: {cpu: 50m, memory: 128Mi}
+            limits: {memory: 512Mi}
+      volumes:
+        - name: data
+          emptyDir: {}
+        - name: init
+          configMap: {name: agent-memory-schema}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: agents
+spec:
+  selector: {app: postgres}
+  ports:
+    - {name: postgres, port: 5432, targetPort: postgres}

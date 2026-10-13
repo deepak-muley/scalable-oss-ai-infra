@@ -1,0 +1,29 @@
+# Contract for one agent. Nothing reconciles this object yet.
+# agents/01 through agents/09 are the manifests a controller would render.
+apiVersion: agents.lab.example/v1alpha1
+kind: AgentBlueprint
+metadata:
+  name: sre-agent
+  namespace: agents
+spec:
+  harness: loop
+  model: Qwen/Qwen2.5-7B-Instruct
+  skills:
+    - cluster-read
+  policy:
+    allowTools: [list_pods, query_prometheus, search_docs]
+    maxSteps: 8
+    maxRepeatsPerTool: 3
+  sandbox:
+    enabled: false
+    runtimeClassName: gvisor
+  memory:
+    working: valkey.agents.svc:6379
+    episodic: postgres.agents.svc:5432/agent_memory
+    semantic: http://qdrant.apps.svc.cluster.local:6333/collections/agent-semantic
+  identity:
+    serviceAccount: agent-worker
+    onBehalfOf: true
+    tokenTTL: 5m
+  observability:
+    otelEndpoint: otel-collector.observability.svc:4317

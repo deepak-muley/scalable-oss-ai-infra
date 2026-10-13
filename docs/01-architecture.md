@@ -116,7 +116,8 @@ sequenceDiagram
   E->>E: on completion: usage tokens → metadata<br/>charge token budget, emit metrics/logs
 ```
 
-Where latency goes:
+Where latency goes (what the two phases compute is
+[docs/25](25-kv-cache-prefill-decode.md)):
 
 * **TTFT** (time to first token) = queueing + prefill. Prefix caching and
   LMCache attack the prefill part. Autoscaling and routing attack queueing.

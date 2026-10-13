@@ -1,0 +1,1 @@
+{"id": "loop-list", "expect_tools": ["list_pods"], "forbid_tools": ["delete_pod"], "steps": [{"tool": "list_pods"}, {"tool": "list_pods"}, {"tool": "list_pods"}]}

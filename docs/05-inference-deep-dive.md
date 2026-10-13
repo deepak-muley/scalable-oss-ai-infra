@@ -1,5 +1,10 @@
 # 05 — Inference deep dive
 
+What prefill computes, what each decode step computes, and why the KV
+cache is the memory that limits concurrency:
+[docs/25](25-kv-cache-prefill-decode.md). This doc is the serving system
+built on that mechanism.
+
 ## 1. What an LLM server actually does
 
 ```

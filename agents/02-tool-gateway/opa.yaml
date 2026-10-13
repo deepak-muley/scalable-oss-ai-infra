@@ -1,0 +1,49 @@
+# install.sh substitutes OPA_VERSION from versions.env.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: opa
+  namespace: agents
+  labels: {app: opa}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: opa}}
+  template:
+    metadata:
+      labels: {app: opa}
+    spec:
+      securityContext: {runAsNonRoot: true}
+      containers:
+        - name: opa
+          image: openpolicyagent/opa:OPA_VERSION
+          args:
+            - run
+            - --server
+            - --addr=0.0.0.0:8181
+            - /policies/authz.rego
+          ports:
+            - {name: http, containerPort: 8181}
+          readinessProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 5
+          volumeMounts:
+            - {name: policy, mountPath: /policies, readOnly: true}
+          resources:
+            requests: {cpu: 20m, memory: 64Mi}
+            limits: {memory: 256Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+      volumes:
+        - name: policy
+          configMap: {name: opa-policy}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: opa
+  namespace: agents
+spec:
+  selector: {app: opa}
+  ports:
+    - {name: http, port: 8181, targetPort: http}

@@ -1,0 +1,71 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: agentblueprints.agents.lab.example
+spec:
+  group: agents.lab.example
+  scope: Namespaced
+  names:
+    kind: AgentBlueprint
+    listKind: AgentBlueprintList
+    plural: agentblueprints
+    singular: agentblueprint
+    shortNames: [abp]
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - {name: Harness, type: string, jsonPath: .spec.harness}
+        - {name: Model, type: string, jsonPath: .spec.model}
+      schema:
+        openAPIV3Schema:
+          type: object
+          required: [spec]
+          properties:
+            spec:
+              type: object
+              required: [harness, model, skills]
+              properties:
+                harness:
+                  type: string
+                  enum: [loop, graph]
+                model: {type: string}
+                skills:
+                  type: array
+                  items: {type: string}
+                policy:
+                  type: object
+                  properties:
+                    allowTools:
+                      type: array
+                      items: {type: string}
+                    maxSteps: {type: integer, minimum: 1}
+                    maxRepeatsPerTool: {type: integer, minimum: 1}
+                sandbox:
+                  type: object
+                  properties:
+                    enabled: {type: boolean}
+                    runtimeClassName: {type: string}
+                memory:
+                  type: object
+                  properties:
+                    working: {type: string}
+                    episodic: {type: string}
+                    semantic: {type: string}
+                identity:
+                  type: object
+                  properties:
+                    serviceAccount: {type: string}
+                    onBehalfOf: {type: boolean}
+                    tokenTTL: {type: string}
+                observability:
+                  type: object
+                  properties:
+                    otelEndpoint: {type: string}
+            status:
+              type: object
+              properties:
+                phase: {type: string}

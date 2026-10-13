@@ -12,3 +12,4 @@ section "Kueue";             kubectl get clusterqueue; kubectl get workloads -A
 section "KAI";               kubectl get queues.scheduling.run.ai 2>/dev/null || echo "KAI not installed (SKIP_KAI=true, or install platform/10-kai-scheduler)"
 section "Training";          kubectl get trainjob,rayjob,raycluster -A 2>/dev/null
 section "Autoscaling";       kubectl get scaledobject -A
+section "Agent platform";    kubectl -n agents get deploy,svc 2>/dev/null || echo "agents not installed (./agents/install.sh)"

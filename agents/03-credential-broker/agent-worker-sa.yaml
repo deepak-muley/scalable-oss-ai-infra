@@ -1,0 +1,9 @@
+# Same ServiceAccount the Temporal worker runs as (folder 01). Re-applying
+# it here is intentional: this folder is the identity half of that pod.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: agent-worker
+  namespace: agents
+  annotations:
+    agents.lab/identity: workload

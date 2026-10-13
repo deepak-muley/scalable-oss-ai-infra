@@ -1,0 +1,39 @@
+# Loop and spend alerts for the tool gateway counters.
+# platform/06 sets ruleSelectorNilUsesHelmValues: false, so a rule in
+# namespace agents is loaded. Nothing fires until Prometheus scrapes
+# the ServiceMonitor below.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: agent-control
+  namespace: agents
+  labels: {app: tool-gateway}
+spec:
+  groups:
+    - name: ai-lab.agent-control
+      rules:
+        - alert: AgentToolLoop
+          expr: sum by (agent, tool) (increase(agent_tool_calls_total[5m])) > 15
+          for: 2m
+          labels: {severity: warning}
+          annotations:
+            summary: "{{ $labels.agent }} called {{ $labels.tool }} more than 15 times in 5 minutes"
+        - alert: AgentCostAnomaly
+          expr: sum by (agent) (increase(agent_tokens_total[10m])) > 20000
+          for: 5m
+          labels: {severity: warning}
+          annotations:
+            summary: "{{ $labels.agent }} reported more than 20000 tokens in 10 minutes"
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: tool-gateway
+  namespace: agents
+  labels: {app: tool-gateway}
+spec:
+  selector:
+    matchLabels: {app: tool-gateway}
+  endpoints:
+    - port: http
+      path: /metrics

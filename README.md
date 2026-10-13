@@ -26,6 +26,8 @@ a GPU lab, with the path to hyperscale documented.
 │ SECURITY     Keycloak · OpenBao + External Secrets · Kyverno · Falco ·     │
 │              Trivy · Cilium NetworkPolicy/WireGuard · Llama Guard          │
 ├────────────────────────────────────────────────────────────────────────────┤
+│ AGENTS       Temporal resume · OPA action policy · skills · blueprint      │
+├────────────────────────────────────────────────────────────────────────────┤
 │ PLATFORM     Cilium (CNI, no kube-proxy, LB-IPAM, Hubble) · NVIDIA GPU     │
 │              Operator · cert-manager · NFS/RWX storage · Prometheus/Grafana│
 │              · KEDA · LeaderWorkerSet                                      │
@@ -49,6 +51,7 @@ a GPU lab, with the path to hyperscale documented.
 | How many GPUs one node can hold | [docs/23-gpus-per-node.md](docs/23-gpus-per-node.md) |
 | Install on your GPU lab, step by step | [docs/04-install-runbook.md](docs/04-install-runbook.md) |
 | Learn inference internals (vLLM, LMCache, routing, autoscaling) | [docs/05-inference-deep-dive.md](docs/05-inference-deep-dive.md) |
+| What the KV cache, prefill, and decode are | [docs/25-kv-cache-prefill-decode.md](docs/25-kv-cache-prefill-decode.md) |
 | Scaling inference: batching algorithms and backfill | [docs/24-scaling-inference.md](docs/24-scaling-inference.md) |
 | Learn distributed training (parallelism, Kueue, Ray, RL) | [docs/06-training-deep-dive.md](docs/06-training-deep-dive.md) |
 | Size models to GPUs | [docs/07-model-catalog.md](docs/07-model-catalog.md) |
@@ -66,6 +69,7 @@ a GPU lab, with the path to hyperscale documented.
 | Capacity planning and onboarding tenants | [docs/18-capacity-planning-and-tenancy.md](docs/18-capacity-planning-and-tenancy.md) |
 | llm-d P/D disaggregation, SGLang, speculative decoding | [docs/19-advanced-serving.md](docs/19-advanced-serving.md) |
 | Build apps on it: chat UI, RAG, agents + MCP, batch API, notebooks | [docs/20-apps-and-workbench.md](docs/20-apps-and-workbench.md) |
+| Run long-lived agents: resume, action policy, skills, eval gate | [docs/26-enterprise-agent-platform.md](docs/26-enterprise-agent-platform.md) · [`agents/`](agents/README.md) |
 | Day-2: backups, upgrades, image pre-pull, multi-cluster (MultiKueue) | [docs/21-day2-ops-and-multicluster.md](docs/21-day2-ops-and-multicluster.md) |
 
 ## Repository layout
@@ -153,6 +157,17 @@ apps/
   03-rag-app/                 FastAPI RAG over the lab docs (embed → search → rerank → chat)
   04-agent-mcp/               tool-calling agent + MCP server (k8s, Prometheus, docs)
   05-batch-api/               OpenAI-format batch via vllm run-batch (Kueue)
+agents/                       LONG-RUNNING AGENTS (docs/26)
+  01-durable-runtime/         Temporal dev server + worker (resume after pod death)
+  02-tool-gateway/            OPA allow-list, budgets, approval, kill switch
+  03-credential-broker/       token exchange + OpenBao policy; SPIRE opt-in
+  04-sandbox/                 gVisor RuntimeClass for exec_code
+  05-memory/                  Valkey working memory, Postgres episodes
+  06-skills/                   SKILL.md manifests
+  07-harness/                  two adapters + A2A agent card
+  08-decision-traces/           decision span + loop and cost alerts
+  09-eval-loop/                trajectory gate, Argo promotes a skill version
+  10-blueprint/                AgentBlueprint CRD
 workbench/
   01-jupyterhub/              notebooks with GPU and Ray-client profiles
 ops/
@@ -180,6 +195,7 @@ kubectl -n llm-serving create secret generic hf-token --from-literal=token=hf_xx
 ./scripts/install-all.sh training
 ./scripts/verify.sh
 ./scripts/lint.sh                 # shellcheck + yamllint + kubeconform (same as CI)
+# Optional, after the substrate: ./scripts/install-all.sh agents
 ```
 
 ## A note on versions & accuracy

@@ -4,7 +4,7 @@
 
 ```
 weights  = params × bytes_per_param           (bf16=2, fp8=1, int4≈0.5)
-kv/token = 2 × layers × kv_heads × head_dim × kv_bytes
+kv/token = 2 × layers × kv_heads × head_dim × kv_bytes   (K and V; docs/25)
 vLLM KV budget ≈ gpu_mem × gpu_memory_utilization − weights − activations/overhead (~1–3 GB)
 max concurrent tokens ≈ KV budget / kv_per_token
 ```

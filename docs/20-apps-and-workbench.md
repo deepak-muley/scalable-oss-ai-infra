@@ -125,3 +125,12 @@ Exercises:
   aliases make every app portable across model upgrades.
 * Tools and agents move the security boundary into the application layer:
   apply least privilege to tools just like to pods.
+
+## 8. From one agent loop to a platform
+
+`apps/04` is one process on a laptop. [docs/26](26-enterprise-agent-platform.md)
+and [`agents/`](../agents/README.md) are what you add when that process has
+to run for days, share skills across harnesses, and stop when a kill switch
+is thrown: Temporal, an OPA tool gateway, token exchange, a gVisor
+RuntimeClass, Valkey and Postgres memory, skill manifests, an A2A card,
+decision alerts, and an Argo gate on trajectories.

@@ -46,4 +46,10 @@ python agent.py "Is anything queueing in llm-serving? Check Prometheus and expla
   release notes for your version. That's where centralised tool governance
   belongs at scale.
 * Code-execution tools need real sandboxes (gVisor, Kata, Firecracker), never
-  a plain pod.
+  a plain pod. The RuntimeClass and the policy check that requires it are
+  in [`agents/04-sandbox`](../../agents/04-sandbox/README.md) and
+  [`agents/02-tool-gateway`](../../agents/02-tool-gateway/README.md).
+
+The loop above stops when the process stops. Resume, a kill switch, skill
+manifests, and a trajectory gate are the next labs:
+[docs/26](../../docs/26-enterprise-agent-platform.md).

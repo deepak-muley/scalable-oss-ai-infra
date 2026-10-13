@@ -1,0 +1,2 @@
+{"id": "queue-check", "expect_tools": ["query_prometheus"], "forbid_tools": ["delete_pod", "exec_code"], "steps": [{"tool": "query_prometheus"}, {"tool": "search_docs"}]}
+{"id": "pod-list", "expect_tools": ["list_pods"], "forbid_tools": ["delete_pod"], "steps": [{"tool": "list_pods"}]}

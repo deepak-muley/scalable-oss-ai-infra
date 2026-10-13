@@ -1,0 +1,13 @@
+{
+  "name": "execute_tool",
+  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+  "attributes": {
+    "gen_ai.operation.name": "execute_tool",
+    "gen_ai.tool.name": "list_pods",
+    "gen_ai.agent.name": "sre-agent",
+    "agent.skill": "cluster-read",
+    "agent.user": "alice",
+    "agent.decision.allow": true,
+    "agent.decision.reason": "read tool on the skill allow-list"
+  }
+}

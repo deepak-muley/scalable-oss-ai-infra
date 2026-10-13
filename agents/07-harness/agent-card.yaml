@@ -1,0 +1,72 @@
+# Serves the A2A agent card at /.well-known/agent-card.json
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sre-agent-card
+  namespace: agents
+data:
+  agent-card.json: |
+    {
+      "name": "sre-agent",
+      "description": "Reads cluster state for the lab. Does not delete or exec.",
+      "url": "http://sre-agent-card.agents.svc.cluster.local:8080",
+      "version": "0.1.0",
+      "capabilities": {"streaming": false},
+      "defaultInputModes": ["text/plain"],
+      "defaultOutputModes": ["text/plain"],
+      "skills": [
+        {
+          "id": "cluster-read",
+          "name": "Cluster read",
+          "description": "List pods, query Prometheus, and search the lab docs.",
+          "tags": ["sre", "read-only"]
+        }
+      ]
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sre-agent-card
+  namespace: agents
+  labels: {app: sre-agent-card}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: sre-agent-card}}
+  template:
+    metadata:
+      labels: {app: sre-agent-card}
+    spec:
+      securityContext: {runAsNonRoot: true, runAsUser: 65534}
+      containers:
+        - name: card
+          image: python:3.12-slim
+          command: ["python", "-m", "http.server", "8080", "--directory", "/www"]
+          ports:
+            - {name: http, containerPort: 8080}
+          readinessProbe:
+            httpGet: {path: /.well-known/agent-card.json, port: http}
+            periodSeconds: 5
+          volumeMounts:
+            - name: card
+              mountPath: /www/.well-known
+              readOnly: true
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {memory: 128Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+      volumes:
+        - name: card
+          configMap: {name: sre-agent-card}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sre-agent-card
+  namespace: agents
+spec:
+  selector: {app: sre-agent-card}
+  ports:
+    - {name: http, port: 8080, targetPort: http}
