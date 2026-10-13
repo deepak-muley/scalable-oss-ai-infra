@@ -4,7 +4,7 @@ driver:
 toolkit:
   enabled: true           # configures containerd + creates RuntimeClass "nvidia"
 devicePlugin:
-  enabled: true
+  enabled: true           # false when HAMi owns nvidia.com/gpu (platform/11-hami)
 mig:
   strategy: single        # "single": MIG slices appear as nvidia.com/gpu
                           # "mixed": appear as nvidia.com/mig-1g.10gb etc.

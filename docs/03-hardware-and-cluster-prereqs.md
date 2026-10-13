@@ -70,10 +70,11 @@ Local NVMe   containerd images, LMCache local_disk, Ray spill, /tmp for training
 
 | Mechanism | Isolation | Use |
 |---|---|---|
-| Whole GPU | full | default for serving and training |
-| **MIG** (A100/H100/H200/B200) | hardware: memory + SMs | many small models, multi-tenant notebooks |
+| Whole GPU | full | default for serving and training. How the operator brings the device up is [`platform/05-gpu-operator`](../platform/05-gpu-operator/README.md) |
+| **MIG** (A100/H100/H200/B200) | hardware: memory + SMs | many small models, multi-tenant notebooks. Profile names, slice counts, and `single` vs `mixed` are in [`platform/05-gpu-operator`](../platform/05-gpu-operator/README.md) |
 | **Time-slicing** | none (shared memory) | dev and test, several tiny models on consumer GPUs |
 | **MPS** | partial | many small inference processes |
+| **HAMi** | software cap on memory and compute, NVIDIA and AMD | several pods per card with a hard memory limit; the AMD path when an Instinct node joins. Not installed by default. [`platform/11-hami`](../platform/11-hami/README.md) |
 | **DRA** (Dynamic Resource Allocation, k8s 1.34+ GA, NVIDIA DRA driver) | per device, rich selectors | request "a GPU with ≥ 40 GB and NVLink to this other one", share via claims; replaces device-plugin semantics over time |
 
 ## Labels you'll use (from GPU Feature Discovery)

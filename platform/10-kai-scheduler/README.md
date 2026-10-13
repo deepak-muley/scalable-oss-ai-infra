@@ -136,7 +136,7 @@ something preempts or you delete them.
 | `global.gpuSharingMode` | What you get | When |
 |---|---|---|
 | `NonMemoryEnforced` | Scheduler packs fractions onto one device. The process can still allocate past its fraction. | This lab. No extra operator. |
-| `HamiCore` | Same annotations, HAMi enforces the memory cap. | Untrusted notebooks sharing a GPU. |
+| `HamiCore` | Same annotations, HAMi enforces the memory cap. | Untrusted notebooks sharing a GPU. See [`platform/11-hami`](../11-hami/README.md) |
 | `NvFractions` | NVIDIA gpu-fractioning, CDI/NRI, per-container `nvidia.com/container.<name>.gpu-memory.request`. | Production isolation on recent GPU Operator. |
 | `Disabled` | Fractional pods are rejected. | Whole GPUs only. |
 

@@ -7,7 +7,7 @@
 | Nodes `NotReady` after cluster bootstrap | `kubectl -n kube-system get pods -l k8s-app=cilium` | Cilium not installed yet, or wrong `API_SERVER_IP` (with kube-proxy removed, Cilium can't reach the API via the ClusterIP) |
 | `Service type=LoadBalancer` stuck `<pending>` | `kubectl get ciliumloadbalancerippool` | pool not applied, or its range is in use; L2 policy interface regex doesn't match the NIC |
 | GPU Operator pods crash-looping | `kubectl -n gpu-operator logs ds/nvidia-driver-daemonset` | driver installed on the host **and** `driver.enabled=true`; Secure Boot blocking the module; unsupported kernel |
-| `nvidia.com/gpu: 0` on a node | `kubectl -n gpu-operator logs ds/nvidia-device-plugin-daemonset` | toolkit not configured in containerd, or the validator failed |
+| `nvidia.com/gpu: 0` on a node | `kubectl -n gpu-operator logs ds/nvidia-device-plugin-daemonset` | toolkit not configured in containerd, or the validator failed. If HAMi is installed, its plugin owns this resource and the operator's device plugin is off on purpose (`platform/11-hami`) |
 | Pod `Insufficient nvidia.com/gpu` | `kubectl describe node` | GPUs held by other pods; Kueue admitted more than the nodes have (quota above capacity) |
 | Kueue job never starts | `kubectl describe workload -n training` | no LocalQueue with that name, quota too small, or flavor labels don't match nodes |
 | KAI pod stays Pending | `kubectl describe pod`, `kubectl describe queue <leaf>`, `kubectl get podgroups -n training` | queue label names a parent or a missing queue; `gpu-fraction` combined with `nvidia.com/gpu`; cpu/memory `limit: 0` on the queue; gang `batch-min-member` larger than free GPUs; topology required label absent; fractional pod on kind (no NVML) |

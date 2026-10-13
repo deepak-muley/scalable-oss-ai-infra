@@ -57,6 +57,7 @@ Key insights that shape the design:
 |---|---|---|
 | Cluster networking | **Cilium** (eBPF, kube-proxy-free, Hubble) | `platform/00-cilium` |
 | GPU enablement & health | **NVIDIA GPU Operator** (driver, toolkit, device plugin, DCGM, MIG) | `platform/05-gpu-operator` |
+| GPU share by memory and compute, including a later AMD node | **HAMi** (documented, not installed) | `platform/11-hami` |
 | Job admission, quotas, fair share | **Kueue** (+ kube-scheduler) | `platform/09-kueue` |
 | GPU placement, sharing, gang, topology | **KAI Scheduler** (opt-in per pod) | `platform/10-kai-scheduler` |
 | Multi-node replicas | **LeaderWorkerSet**, JobSet | `platform/08-lws` |

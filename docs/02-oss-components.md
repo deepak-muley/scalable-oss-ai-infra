@@ -12,7 +12,8 @@ knowing. Licences are as of writing; check before commercial use.
 | **MetalLB** (optional) | LB IPs when not using Cilium LB-IPAM | Services | kube-vip | Apache-2.0 |
 | **cert-manager** | TLS certs, lab CA, webhook certs | Gateway HTTPS listeners, operators | – | Apache-2.0 |
 | **NFS subdir provisioner** | RWX `nfs-client` StorageClass for model cache | vLLM pods, download job | Longhorn, Rook-Ceph (CephFS), JuiceFS | Apache-2.0 |
-| **NVIDIA GPU Operator** | driver, container toolkit, device plugin, GFD labels, DCGM exporter, MIG manager | kubelet, Prometheus, Kueue flavors (labels) | (manual install of the same pieces); AMD GPU Operator for AMD | Apache-2.0 |
+| **NVIDIA GPU Operator** | driver, container toolkit, device plugin, GFD labels, DCGM exporter, MIG manager | kubelet, Prometheus, Kueue flavors (labels) | manual install of the same pieces; AMD GPU Operator for the AMD driver stack | Apache-2.0 |
+| **HAMi** (docs only) | share one GPU by memory and compute percent; NVIDIA limiter and an AMD (ROCm) device plugin | GPU Operator or AMD GPU Operator with that operator's device plugin disabled; its own scheduler | KAI fractional GPUs, NVIDIA MIG / MPS, AMD GPU Operator's own plugin | Apache-2.0 |
 | **kube-prometheus-stack** | Prometheus, Alertmanager, Grafana | DCGM, vLLM, Envoy, Kueue, Ray metrics; KEDA queries it | VictoriaMetrics, Thanos/Mimir at scale | Apache-2.0 / AGPL (Grafana) |
 | **KEDA** | autoscale on Prometheus queries, cron, scale-to-zero | vLLM Deployments (via HPA) | HPA + prometheus-adapter, Knative | Apache-2.0 |
 | **LeaderWorkerSet** | a "replica" spanning multiple pods/nodes | vLLM multi-node, llm-d, Kueue | JobSet (batch), RayCluster | Apache-2.0 |

@@ -88,6 +88,7 @@ platform/
   08-lws/                     LeaderWorkerSet (multi-node model replicas)
   09-kueue/                   GPU quotas, queues, cohorts, priorities
   10-kai-scheduler/           KAI: bin-pack, fractional GPU, gang, topology
+  11-hami/                    HAMi (docs): memory-capped GPU share, NVIDIA and AMD
 security/
   01-identity-keycloak/       OIDC + gateway JWT policy
   02-secrets-openbao-eso/     OpenBao + External Secrets Operator
