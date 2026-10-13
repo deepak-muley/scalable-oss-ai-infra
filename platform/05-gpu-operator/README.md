@@ -10,6 +10,11 @@ A pod never talks to the operator. It asks Kubernetes for
 `nvidia.com/gpu: 1`. The device plugin and the container toolkit are what
 make that request land on a real device.
 
+On a laptop, [`kind/`](../../kind/README.md#how-fake-gpus-work) skips this
+folder entirely. `fake-gpus.sh` patches `status.capacity` so the same
+resource name exists for scheduling and Kueue, with no driver and no
+device in the container.
+
 ## What runs on a GPU node
 
 | Component | DaemonSet / controller | What it does |

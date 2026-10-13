@@ -212,10 +212,11 @@ not preemptible. Those are different knobs. `train` / `build` /
 
 ## kind
 
-`kind/fake-gpus.sh` makes `nvidia.com/gpu` allocatable, which is enough for
-examples 01, 03, and 04. Example 02 stays Pending: fractional mode starts a
-reservation pod that needs NVML. Example 05 needs the node labels in its
-header; the two gpu-sim workers can be one zone and two racks.
+[`kind/fake-gpus.sh`](../../kind/README.md#how-fake-gpus-work) makes
+`nvidia.com/gpu` allocatable, which is enough for examples 01, 03, and 04.
+Example 02 stays Pending: fractional mode starts a reservation pod that
+needs NVML. Example 05 needs the node labels in its header; the two
+gpu-sim workers can be one zone and two racks.
 
 ```bash
 cd kind && ./up.sh

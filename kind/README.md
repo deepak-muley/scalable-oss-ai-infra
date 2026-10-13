@@ -16,7 +16,84 @@ Gateway routing/aliases/auth/token accounting, Inference Extension EPP,
 KEDA autoscaling on vLLM metrics, Kueue quotas/cohorts/preemption with GPU
 requests, KubeRay jobs, Kubeflow Trainer CRDs, Prometheus/Grafana wiring.
 
-What you can't: CUDA, NCCL, real throughput/latency, LMCache, GPU Operator.
+What you can't: CUDA, NCCL, real throughput/latency, LMCache, GPU Operator,
+MIG, time-slicing, HAMi memory isolation, or anything that opens a real
+device node or talks to NVML.
+
+## How fake GPUs work
+
+The GPU Operator is not installed. Nothing loads a driver, registers a
+device plugin, or mounts `/dev/nvidia*`. Scheduling still sees
+`nvidia.com/gpu` because two pieces of Kubernetes state are faked by hand.
+
+**1. Labels at cluster create.** `kind-config.yaml` (and the lite config)
+marks two workers as the GPU pool. Those labels are what Kueue's
+`gpu-default` ResourceFlavor and this script select on:
+
+```yaml
+ai.lab/node-pool: gpu-sim
+nvidia.com/gpu.present: "true"
+nvidia.com/gpu.product: SIM-GPU-80GB
+```
+
+The control-plane and the `system` worker stay unlabeled, so GPU pods do
+not land on them.
+
+**2. Capacity via a status patch.** `up.sh` runs
+`fake-gpus.sh ${FAKE_GPUS_PER_NODE}` (default **4**). For every node with
+`nvidia.com/gpu.present=true` the script patches the node **status**
+subresource:
+
+```bash
+kubectl patch node/<name> --subresource=status --type=json \
+  -p '[{"op":"add","path":"/status/capacity/nvidia.com~1gpu","value":"4"}]'
+```
+
+After that, `kubectl describe node` shows `nvidia.com/gpu: 4` under both
+Capacity and Allocatable. kube-scheduler and Kueue treat that like a
+device-plugin resource: a pod with `limits: nvidia.com/gpu: 1` consumes
+one unit, eight such pods across two nodes fill the lab, and a ninth
+stays Pending or waits in a Kueue queue. The container receives **no**
+device. There is no RuntimeClass `nvidia`, no CDI, and no
+`NVIDIA_VISIBLE_DEVICES`. The process is ordinary CPU.
+
+Re-run the script after a kind node restart. The kubelet rebuilds node
+status from what it actually has and the fake capacity disappears until
+you patch again:
+
+```bash
+./fake-gpus.sh 4                 # or: FAKE_GPUS_PER_NODE=8 ./up.sh
+kubectl get nodes -o custom-columns=\
+'NAME:.metadata.name,GPU:.status.allocatable.nvidia\.com/gpu'
+```
+
+**3. Workloads still request a GPU.** The simulated vLLM Deployments in
+`manifests/sim-models.yaml` set `nvidia.com/gpu: 1` even though the
+image is [`llm-d-inference-sim`](https://github.com/llm-d/llm-d-inference-sim)
+(OpenAI API + vLLM-shaped Prometheus metrics, no weights). Training and
+Kueue demos do the same. That is what makes quota, preemption, and
+serving-versus-batch contention behave like the real lab on a laptop.
+
+```
+kind create  →  labels on two workers
+fake-gpus.sh →  status.capacity["nvidia.com/gpu"] = N
+sim / TrainJob / Job  →  request nvidia.com/gpu: 1
+kube-scheduler / Kueue / KAI  →  pack and account as if devices existed
+container start  →  CPU only; no /dev/nvidia*
+```
+
+| Layer | Sees a GPU? |
+|---|---|
+| Node labels / GFD-style product string | yes (`SIM-GPU-80GB`) |
+| Node allocatable, Kueue flavors, kube-scheduler | yes (`nvidia.com/gpu`) |
+| KAI whole-GPU and gang examples | yes (count only) |
+| KAI fractional / reservation pods (NVML) | **no** — need a real GPU |
+| Container, CUDA, DCGM, MIG, HAMi limiter | **no** |
+
+The real path that creates `nvidia.com/gpu` on hardware is
+[`platform/05-gpu-operator`](../platform/05-gpu-operator/README.md).
+KAI's kind notes are in
+[`platform/10-kai-scheduler`](../platform/10-kai-scheduler/README.md#kind).
 
 ## Requirements
 
@@ -35,8 +112,9 @@ kubectl -n monitoring port-forward svc/kps-grafana 3000:80     # admin/prom-oper
 
 Low on memory? `PROFILE=lite ./up.sh` (fits ~8 GB Docker; run tests with `SKIP_RAY=true ./test.sh`).
 
-Flags: `WITH_MONITORING=false` (lighter), `WITH_SECURITY=true` (Kyverno audit + Falco + OpenBao/ESO), `WITH_GIE=true` (Inference
-Extension pool of 3 sims), `WITH_TRAINER=true` (Kubeflow Trainer),
+Flags: `FAKE_GPUS_PER_NODE=8` (default 4), `WITH_MONITORING=false` (lighter),
+`WITH_SECURITY=true` (Kyverno audit + Falco + OpenBao/ESO), `WITH_GIE=true`
+(Inference Extension pool of 3 sims), `WITH_TRAINER=true` (Kubeflow Trainer),
 `SIM_IMAGE=ghcr.io/llm-d/llm-d-inference-sim:<tag>` to pin the simulator.
 
 ## Talk to it like the real thing

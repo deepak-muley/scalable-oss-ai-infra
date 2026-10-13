@@ -23,8 +23,9 @@ the "why" lives.
 | # | Read / do | Why |
 |---|---|---|
 | 6 | 📖 [05 — Inference deep dive](05-inference-deep-dive.md) | KV cache, batching, LMCache, routing: the most important doc for serving |
+| 6b | 📖 [24 — Scaling inference](24-scaling-inference.md) | static, dynamic, and continuous batching; backfill vs preemption |
 | 7 | 📖 [07 — Model catalog & GPU sizing](07-model-catalog.md) | the memory math |
-| 8 | 📖 [03 — Hardware & cluster prereqs](03-hardware-and-cluster-prereqs.md) → 🛠 [04 — Install runbook](04-install-runbook.md) | get your GPU cluster up |
+| 8 | 📖 [03 — Hardware & cluster prereqs](03-hardware-and-cluster-prereqs.md) → 🛠 [04 — Install runbook](04-install-runbook.md) | get your GPU cluster up. How many GPUs fit on one node: [23](23-gpus-per-node.md) |
 | 9 | 🛠 [09 — Learning path](09-learning-path.md), Stage 1 | vLLM knobs, prefix caching, LMCache: measure everything |
 
 ## Weeks 4–6 — training and the model lifecycle
@@ -77,4 +78,5 @@ the "why" lives.
 | 08 | [Observability basics](08-observability.md) | 19 | [Advanced serving](19-advanced-serving.md) |
 | 09 | [Learning path (hands-on labs)](09-learning-path.md) | 20 | [Apps & workbench](20-apps-and-workbench.md) |
 | 10 | [Scaling to hyperscale](10-scaling-to-hyperscale.md) | 21 | [Day-2 ops & multicluster](21-day2-ops-and-multicluster.md) |
-| 22 | [Scheduling (Kueue, KAI, placement)](22-scheduling.md) | | |
+| 22 | [Scheduling (Kueue, KAI, placement)](22-scheduling.md) | 23 | [GPUs per node](23-gpus-per-node.md) |
+| 24 | [Scaling inference (batching, backfill)](24-scaling-inference.md) | | |

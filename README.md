@@ -46,8 +46,10 @@ a GPU lab, with the path to hyperscale documented.
 | Know every OSS component, why it's here, and alternatives | [docs/02-oss-components.md](docs/02-oss-components.md) |
 | **Try it on a laptop now** (kind, no GPU) | [kind/README.md](kind/README.md) |
 | Prepare GPU hardware & the cluster | [docs/03-hardware-and-cluster-prereqs.md](docs/03-hardware-and-cluster-prereqs.md) |
+| How many GPUs one node can hold | [docs/23-gpus-per-node.md](docs/23-gpus-per-node.md) |
 | Install on your GPU lab, step by step | [docs/04-install-runbook.md](docs/04-install-runbook.md) |
 | Learn inference internals (vLLM, LMCache, routing, autoscaling) | [docs/05-inference-deep-dive.md](docs/05-inference-deep-dive.md) |
+| Scaling inference: batching algorithms and backfill | [docs/24-scaling-inference.md](docs/24-scaling-inference.md) |
 | Learn distributed training (parallelism, Kueue, Ray, RL) | [docs/06-training-deep-dive.md](docs/06-training-deep-dive.md) |
 | Size models to GPUs | [docs/07-model-catalog.md](docs/07-model-catalog.md) |
 | Observe it | [docs/08-observability.md](docs/08-observability.md) |

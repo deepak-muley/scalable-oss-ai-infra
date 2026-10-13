@@ -9,6 +9,13 @@
 | **2 — multi-GPU node** | 4–8× 24–80 GB GPUs, ideally NVLink, 256–512 GB RAM | multi-model serving, 70B with TP, MoE with EP, DDP/FSDP, Kueue contention |
 | **3 — multi-node** | 2+ GPU nodes plus 25–100 GbE (RoCE ideal) or InfiniBand | multi-node training (NCCL), 405B or DeepSeek via LWS, real disaggregation |
 
+Tier 2's "4–8" is the usual server, and eight is the HGX board this
+repo's multi-GPU manifests request. It is a product shape. A node can
+hold fewer, a PCIe chassis sometimes holds ten, and a GB200 NVL72 rack
+has 72 GPUs in one NVLink domain with 4 per Kubernetes node. The three
+counts (per OS, per NVLink domain, per schedulable device) are
+[docs/23](23-gpus-per-node.md).
+
 Keep a small **CPU-only system node** or two for control-plane add-ons
 (Prometheus, gateway, Keycloak, MinIO) so they don't steal GPU-node RAM.
 

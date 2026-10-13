@@ -19,7 +19,9 @@ request ─► tokenize ─► PREFILL (process all prompt tokens in parallel; c
 * **PagedAttention** (vLLM) stores KV in fixed-size blocks like OS pages,
   which means no fragmentation and lets blocks be shared between sequences.
 * **Continuous batching**: new requests join the running batch at every
-  decode step, which keeps the GPU busy.
+  decode step, which keeps the GPU busy. How that compares with static and
+  dynamic batching, and with backfilling a free GPU, is
+  [docs/24](24-scaling-inference.md).
 * **Prefix caching**: block hashes of prompt prefixes let a new request with
   the same system prompt, document or chat history reuse the KV and **skip
   that part of prefill**.

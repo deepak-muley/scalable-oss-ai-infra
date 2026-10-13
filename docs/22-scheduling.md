@@ -87,6 +87,12 @@ GPU is a loan. Checkpoint often enough that losing the loan wastes minutes,
 not a day. Online serving is left outside Kueue so it is never the thing
 that gets preempted. See `platform/09-kueue/README.md` and docs/18.
 
+Backfill is the other way to use those idle GPUs: reserve a start time for
+the gang, and admit a smaller job only when its declared duration ends
+before that time. Pods carry no duration, so this repo uses the preemption
+above. The algorithm, and the same word applied to a free slot in a vLLM
+batch, are [docs/24](24-scaling-inference.md).
+
 `waitForPodsReady` (commented in `platform/09-kueue/values.yaml`) is Kueue's
 gang knob: if any pod in the admitted job is still unscheduled when the
 timeout hits, Kueue evicts the whole Workload and tries again. Turn it on

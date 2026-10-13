@@ -94,6 +94,9 @@ is [docs/22](22-scheduling.md).
   rooted in the YARN model). Same reason it is not installed.
 * **Slurm** remains the HPC standard. **Slinky** (SchedMD) and SUNK
   (CoreWeave) run Slurm on Kubernetes when researchers want `sbatch`.
+  Its backfill scheduler reserves a start time and fills holes around it;
+  [docs/24](24-scaling-inference.md) compares that with Kueue preemption
+  and with vLLM's batching.
 
 A request router (production-stack, Inference Extension, llm-d) is a fourth
 thing: it picks a running replica for one HTTP call. It does not allocate GPUs.

@@ -1,7 +1,9 @@
 # 19 — Advanced serving techniques
 
 These are the techniques that separate "it serves" from "it serves at
-frontier-lab efficiency". Each section points at runnable material. Flags
+frontier-lab efficiency". The batching they sit on — static, dynamic,
+continuous, and cluster backfill — is [docs/24](24-scaling-inference.md).
+Each section points at runnable material. Flags
 are version dependent, so confirm with `vllm serve --help` for the image you
 run (the repo pins `vllm/vllm-openai:v0.10.2`).
 

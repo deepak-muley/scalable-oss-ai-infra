@@ -37,6 +37,7 @@ a pod whose queue is longer?*
 **Lab 1.1 — vLLM knobs.** Deploy `inference/02-vllm-basic`. Benchmark with
 `bench-random`. Change one at a time: `--max-num-seqs` (16/64/256),
 `--gpu-memory-utilization`, `--kv-cache-dtype fp8`, `--max-model-len`.
+Those knobs size a continuous batch ([docs/24](24-scaling-inference.md)).
 *Q: plot throughput against p95 TTFT. Where is the knee?*
 
 **Lab 1.2 — Prefix caching.** Run `bench-shared-prefix` with
